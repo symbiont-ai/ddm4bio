@@ -47,3 +47,6 @@ docstring-code-format = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "network: test requires live network access to a real dataset source (deselect with '-m \"not network\"')",
+]

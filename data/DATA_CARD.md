@@ -1,27 +1,37 @@
 # DATA_CARD
 
 The compliance record for every dataset used in the course. Kept in sync with
-`ddm4bio.datasets.DATASET_REGISTRY`. Rows are populated in **Phase 2**; the
-table below lists the planned datasets and their access tiers.
+`ddm4bio.datasets.DATASET_REGISTRY` (this table is generated to mirror the
+registry one-row-per-key). Each loader tries the real source when
+`download=True, prefer_real=True` and otherwise returns a clearly-labelled
+synthetic/bundled fallback (`source="fallback"`); it never raises just because
+the real source is unavailable.
 
 **Access tiers:** `open` (direct download, no login) · `archive` (frozen but
 downloadable) · `credentialed` (requires DUA/registration — **never**
-auto-downloaded; use the open/synthetic fallback).
+auto-downloaded; the loader raises `PermissionError` with apply-for-access
+instructions, or returns the open/synthetic fallback).
 
-| Key | Dataset | Primary use | Tier | License | Access |
-|---|---|---|---|---|---|
-| `bloodmnist` / `pathmnist` | MedMNIST v2 | PS1 eigen-cells; PS6 classification | open | CC BY 4.0 (code Apache-2.0) | `pip install medmnist` |
-| `pbmc3k` | 10x PBMC 3k (scanpy) | PS5 PCA; PS6 clustering | open | [VERIFY] | scanpy built-in |
-| `mne_sample` | MNE-Python sample (EEG/MEG) | PS4 time–freq; PS5 ICA | open | BSD-3 [VERIFY] | `mne.datasets.sample` |
-| `mitbih` | PhysioNet MIT-BIH Arrhythmia | PS4 signals; PS7 Kalman | open | ODC-BY / PhysioNet [VERIFY] | `wfdb` |
-| `ixi_mri` | IXI brain MRI | PS4 compressed-sensing MRI | open | CC BY-SA 3.0 [VERIFY] | direct download |
-| `fastmri` | NYU fastMRI raw k-space | PS4 CS (optional) | credentialed | DUA, education-only | application required; do **not** auto-download; fall back to `ixi_mri` |
-| `gdsc` | GDSC drug-sensitivity | PS2 dose–response | open | GDSC terms [VERIFY] | direct CSV; fallback synthetic Hill |
-| `breast_wisconsin` | sklearn breast cancer | PS2 sparse features; PS3 baseline | open | public (sklearn) | bundled |
-| `heart_uci` | UCI Heart Disease (Cleveland) | PS3 clinical tabular | open | UCI/CC BY 4.0 [VERIFY] | direct CSV |
-| `tcga_expr` | TCGA expression (GDC/cBioPortal) | PS6 advanced; capstone | open | NIH GDC open [VERIFY] | API; heavy — optional |
-| `jhu_covid` | JHU CSSE COVID-19 | PS7 DMD/SINDy epidemics | archive | CC BY 4.0 (JHU) [VERIFY] | static GitHub CSVs (frozen 2023-03-10) |
+| Key | Dataset | Modality | Tier | License | Access / how-to-fetch | Used by |
+|---|---|---|---|---|---|---|
+| `bloodmnist` | BloodMNIST (MedMNIST v2) | images | open | CC BY 4.0 ✓ | `.npz` over HTTPS from medmnist.com (`urlopen`, cached); fallback: synthetic images | wk1, ps1 |
+| `pathmnist` | PathMNIST (MedMNIST v2) | images | open | CC BY 4.0 ✓ | `.npz` over HTTPS from medmnist.com (`urlopen`, cached); fallback: synthetic images | wk6, ps6 |
+| `pbmc3k` | 10x PBMC 3k (single-cell RNA-seq) | singlecell | open | Creative Commons / 10x Genomics terms of use [VERIFY] | `scanpy` built-in or 10x `.tar.gz` (cached); fallback: synthetic counts | wk5, ps5 |
+| `mne_eeg` | MNE sample EEG/MEG dataset | signals | open | BSD-3-Clause (MNE sample data) ✓ | `mne.datasets.sample` fetch; fallback: synthetic EEG | wk4, ps4 |
+| `mitbih` | MIT-BIH Arrhythmia Database (ECG) | signals | open | ODC-BY v1.0 (PhysioNet) ✓ | `wfdb` from physionet.org (cached); fallback: synthetic ECG | wk4, ps4, wk7, ps7 |
+| `ixi_mri` | IXI Brain MRI Dataset | imaging | open | CC BY-SA 3.0 ✓ | direct NIfTI download via `nibabel` (cached); fallback: Shepp–Logan phantom | ps4 |
+| `fastmri` | fastMRI (NYU Langone / Meta AI) | imaging | **credentialed** | fastMRI Dataset Sharing Agreement (non-commercial research) ✓ | apply at fastmri.med.nyu.edu; loader raises `PermissionError` — do **not** auto-download; fallback: synthetic k-space / `ixi_mri` | ps4 |
+| `gdsc` | GDSC — Genomics of Drug Sensitivity in Cancer | tabular | open | Free for academic/non-commercial use (Sanger/EMBL-EBI) [VERIFY] | direct CSV from cancerrxgene.org (cached); fallback: synthetic Hill dose–response | wk2, ps2 |
+| `tcga_expr` | TCGA gene expression (pan-cancer RNA-seq) | tabular | open | NIH GDC open-access data terms [VERIFY] | GDC API / direct download (cached, heavy); fallback: synthetic expression | ps6, capstone |
+| `jhu_covid` | JHU CSSE COVID-19 time series | timeseries | archive | CC BY 4.0 (JHU, non-commercial terms) [VERIFY] | static GitHub CSVs (frozen); fallback: synthetic epidemic curve | wk7, ps7 |
+| `heart_uci` | UCI Heart Disease (Cleveland) | tabular | open | CC BY 4.0 (UCI ML Repository) ✓ | direct CSV from archive.ics.uci.edu (cached); fallback: synthetic clinical tabular | ps3 |
+| `breast_wisconsin` | Breast Cancer Wisconsin (Diagnostic) | tabular | open | CC BY 4.0 (UCI) / bundled in scikit-learn ✓ | `sklearn.datasets.load_breast_cancer` (bundled, no network → `source="real"`); fallback: synthetic tabular | wk2, wk3, wk6, ps2, ps3, ps6 |
 
+> **✓ = confirmed** against `DATASET_REGISTRY` (license/tier match the registry
+> spec and the loader is implemented).
+>
 > **[VERIFY] items** must be confirmed at build time in Phase 2 (fetch the URL /
 > check the license). If a `[VERIFY]` item fails, do **not** silently
 > substitute — record the decision here and use the nearest open alternative.
+> These remain flagged because the real source's terms still warrant a legal
+> read even though the loader and its fallback are in place.

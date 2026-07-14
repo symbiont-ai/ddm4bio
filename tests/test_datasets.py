@@ -1,0 +1,109 @@
+"""Offline, deterministic tests for the Phase-2 data layer.
+
+These tests exercise every registered loader's FALLBACK path with zero network
+access. For each key in :data:`ddm4bio.datasets.DATASET_REGISTRY` we call
+``get_dataset`` with ``download=False, prefer_real=False`` and assert a
+clearly-labelled fallback comes back. Both flags are required: some loaders
+(e.g. ``breast_wisconsin``) treat their "real" payload as a bundled, offline
+scikit-learn dataset and honour only ``prefer_real``, so ``download=False``
+alone would still yield ``source="real"``. Passing ``prefer_real=False`` too
+forces the synthetic/bundled fallback uniformly across all loaders.
+
+Also covered: unknown-key ``KeyError``, the credentialed ``fastmri`` contract
+(``PermissionError`` when a real download is requested, fallback otherwise),
+registry/spec integrity via ``list_datasets``, and fallback determinism under a
+fixed seed. All assertions run fully offline.
+"""
+
+from __future__ import annotations
+
+import importlib
+
+import numpy as np
+import pytest
+
+from ddm4bio.datasets import (
+    DATASET_REGISTRY,
+    LoadedDataset,
+    get_dataset,
+    list_datasets,
+)
+
+_ALL_KEYS = sorted(DATASET_REGISTRY)
+_TIERS = {"open", "archive", "credentialed"}
+
+
+@pytest.mark.parametrize("key", _ALL_KEYS)
+def test_every_loader_falls_back_offline(key):
+    """Each loader returns a labelled fallback with download/prefer_real off."""
+    loaded = get_dataset(key, download=False, prefer_real=False)
+
+    assert isinstance(loaded, LoadedDataset)
+    assert loaded.source == "fallback"
+    assert loaded.payload is not None
+    assert isinstance(loaded.provenance, str)
+    assert loaded.provenance.strip() != ""
+    # The loader always stamps a non-empty registry key on the result.
+    assert isinstance(loaded.key, str) and loaded.key != ""
+
+
+def test_unknown_key_raises_keyerror():
+    """An unregistered key raises KeyError (message lists available keys)."""
+    with pytest.raises(KeyError):
+        get_dataset("no_such_key")
+
+
+def test_fastmri_real_request_raises_permission_error():
+    """Credentialed fastMRI refuses to auto-download real data."""
+    with pytest.raises(PermissionError):
+        get_dataset("fastmri", download=True, prefer_real=True)
+
+
+def test_fastmri_offline_returns_fallback():
+    """fastMRI with download disabled yields the open fallback, never raises."""
+    loaded = get_dataset("fastmri", download=False)
+
+    assert isinstance(loaded, LoadedDataset)
+    assert loaded.source == "fallback"
+    assert loaded.payload is not None
+    assert loaded.key == "fastmri"
+    assert loaded.provenance.strip() != ""
+
+
+def test_list_datasets_matches_registry():
+    """list_datasets returns exactly one spec per registry entry."""
+    specs = list_datasets()
+    assert len(specs) == len(DATASET_REGISTRY)
+    assert {spec.key for spec in specs} == set(DATASET_REGISTRY)
+
+
+@pytest.mark.parametrize("key", _ALL_KEYS)
+def test_spec_tier_and_loader_are_well_formed(key):
+    """Each spec has a valid tier and an importable ``module:function`` loader."""
+    spec = DATASET_REGISTRY[key]
+    assert spec.tier in _TIERS
+
+    module_name, func_name = spec.loader.split(":")
+    module = importlib.import_module(module_name)
+    assert hasattr(module, func_name)
+    assert callable(getattr(module, func_name))
+
+
+def test_pbmc3k_fallback_is_deterministic():
+    """The synthetic single-cell fallback is reproducible under a fixed seed."""
+    a = get_dataset("pbmc3k", download=False, prefer_real=False, seed=123)
+    b = get_dataset("pbmc3k", download=False, prefer_real=False, seed=123)
+
+    assert a.source == b.source == "fallback"
+    assert np.array_equal(a.payload["counts"], b.payload["counts"])
+    assert np.array_equal(a.payload["labels"], b.payload["labels"])
+
+
+def test_tcga_fallback_is_deterministic():
+    """The synthetic tumor-vs-normal expression fallback is reproducible."""
+    a = get_dataset("tcga_expr", download=False, prefer_real=False, seed=7)
+    b = get_dataset("tcga_expr", download=False, prefer_real=False, seed=7)
+
+    assert a.source == b.source == "fallback"
+    assert np.array_equal(a.payload["expression"], b.payload["expression"])
+    assert np.array_equal(a.payload["labels"], b.payload["labels"])

@@ -21,7 +21,7 @@ notebooks:
 	@echo "nbmake notebook smoke tests land in a later phase"
 
 data:
-	@echo "dataset fetch lands in Phase 2 (see data/DATA_CARD.md)"
+	$(VENV)/bin/python scripts/fetch_data.py
 
 clean:
 	rm -rf .ruff_cache .pytest_cache .mypy_cache build dist *.egg-info
