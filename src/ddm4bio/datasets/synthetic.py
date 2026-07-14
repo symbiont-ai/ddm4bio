@@ -84,6 +84,24 @@ class SparseSignal:
 
 
 @dataclass
+class LorenzTrajectory:
+    """Ground truth for a Lorenz-system trajectory.
+
+    Attributes
+    ----------
+    t: ``(n_steps,)`` uniform time grid.
+    states: ``(n_steps, 3)`` state trajectory with columns ``[x, y, z]``.
+    sigma, rho, beta: the true Lorenz parameters.
+    """
+
+    t: np.ndarray
+    states: np.ndarray
+    sigma: float
+    rho: float
+    beta: float
+
+
+@dataclass
 class LinearDynamics:
     """Ground truth for a linear dynamical system.
 
@@ -387,3 +405,69 @@ def make_linear_dynamics(
         trajectory[step] = state
 
     return LinearDynamics(A=a_mat, eigs=eigs, trajectory=trajectory)
+
+
+def make_lorenz(
+    sigma: float = 10.0,
+    rho: float = 28.0,
+    beta: float = 8.0 / 3.0,
+    x0: np.ndarray | None = None,
+    t_max: float = 20.0,
+    n_steps: int = 2000,
+    noise: float = 0.0,
+    seed: int | None = None,
+) -> LorenzTrajectory:
+    """Integrate the Lorenz system with known parameters.
+
+    The Lorenz equations are ``dx = sigma (y - x)``,
+    ``dy = x (rho - z) - y``, ``dz = x y - beta z``. The system is integrated on
+    a uniform time grid; when ``noise > 0`` independent Gaussian noise is added
+    to every state sample using a locally seeded generator.
+
+    Parameters
+    ----------
+    sigma, rho, beta: true Lorenz parameters (defaults give the classic chaotic
+        attractor).
+    x0: ``(3,)`` initial condition; ``[1, 1, 1]`` when None.
+    t_max, n_steps: integration horizon and number of uniform grid points.
+    noise: standard deviation of additive Gaussian observation noise.
+    seed: optional RNG seed for the noise draw (deterministic when set).
+
+    Returns
+    -------
+    LorenzTrajectory
+        Dataclass exposing the ``(n_steps, 3)`` states and the true parameters.
+    """
+    from scipy.integrate import solve_ivp
+
+    def rhs(_t: float, y: np.ndarray) -> list[float]:
+        x_c, y_c, z_c = y
+        dx = sigma * (y_c - x_c)
+        dy = x_c * (rho - z_c) - y_c
+        dz = x_c * y_c - beta * z_c
+        return [dx, dy, dz]
+
+    init = np.array([1.0, 1.0, 1.0]) if x0 is None else np.asarray(x0, dtype=float)
+    t_eval = np.linspace(0.0, t_max, n_steps)
+    sol = solve_ivp(
+        rhs,
+        (0.0, t_max),
+        init,
+        t_eval=t_eval,
+        method="RK45",
+        rtol=1e-9,
+        atol=1e-12,
+    )
+    states = sol.y.T.copy()
+
+    if noise > 0.0:
+        rng = np.random.default_rng(seed)
+        states = states + rng.normal(0.0, noise, size=states.shape)
+
+    return LorenzTrajectory(
+        t=sol.t,
+        states=states,
+        sigma=sigma,
+        rho=rho,
+        beta=beta,
+    )
