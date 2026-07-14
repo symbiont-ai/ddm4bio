@@ -1,0 +1,15 @@
+format: jb-book
+root: intro
+parts:
+  - caption: Course
+    chapters:
+      - file: syllabus
+      - file: schedule
+      - file: how-it-works
+  - caption: Sample lesson
+    chapters:
+      - file: lessons/wk5_svd_pca_ica
+  - caption: Reference
+    chapters:
+      - file: references
+      - file: attribution

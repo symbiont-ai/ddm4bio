@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# JupyterBook: generated site + execution cache (do not commit)
+book/_build/
+.jupyter_cache/
+
+# Jupytext paired notebooks generate .ipynb from .py; ignore the generated ones
+notebooks/**/*.ipynb
+
+# Data: populated by loaders; keep the .gitkeep placeholders
+data/raw/*
+data/cache/*
+!data/raw/.gitkeep
+!data/cache/.gitkeep

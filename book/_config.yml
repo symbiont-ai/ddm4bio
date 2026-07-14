@@ -1,0 +1,26 @@
+# JupyterBook configuration for the ddm4bio course
+title: "Data-Driven Modeling & Scientific Computation for the Life Sciences"
+author: "Ilknur Icke"
+copyright: "2026, Symbiont-AI Cognitive Labs"
+
+execute:
+  execute_notebooks: force
+  timeout: 120
+
+html:
+  use_repository_button: true
+  use_issues_button: false
+  home_page_in_navbar: true
+
+repository:
+  url: "https://github.com/symbiont-ai/ddm4bio"
+  path_to_book: "book"
+  branch: "main"
+
+launch_buttons:
+  colab_url: "https://colab.research.google.com"
+  notebook_interface: "classic"
+  thebe: false
+
+bibtex_bibfiles:
+  - "references.bib"

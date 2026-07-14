@@ -1,0 +1,16 @@
+name: ddm4bio
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - scipy
+  - pandas
+  - scikit-learn
+  - matplotlib
+  - pip
+  - pip:
+      - -e .[dev]
+# Heavy, area-specific extras (torch, scanpy/anndata, mne/wfdb/PyWavelets,
+# pysindy/pydmd, medmnist/scikit-image/nibabel) are installed on demand via the
+# pip extras, e.g. `pip install -e ".[dynamics]"`.
