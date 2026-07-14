@@ -16,7 +16,8 @@ This course is a biomedical re-casting of that shift. It teaches the methods of
 data-driven modeling and scientific computation — linear algebra done at scale,
 dimensionality reduction, signal and image processing, machine learning, dynamical
 systems discovered from data, and deep learning — with every technique motivated,
-demonstrated, and practiced on real biological and clinical data.
+demonstrated, and practiced on a mix of open clinical data and synthetic ground-truth
+fixtures where the true answer is known.
 
 ## Two ways of reasoning
 

@@ -2,14 +2,15 @@
 
 ## Format
 
-This is an **8-week intensive**. Each week is built around three contact sessions:
+This is a **self-paced, 8-week online course** — enroll and start any time, and move at
+whatever pace suits you. "Week" is simply a unit of coherent material, not a fixed
+schedule. Each week has three parts you work through in order:
 
-- **Two 90-minute lectures** that develop the ideas and the mathematics.
-- **One 2-hour computational lab** that puts those ideas to work on real biomedical data.
-
-Because the course is self-paced, "week" is simply a unit of coherent material — you can
-move faster or slower as your schedule allows, but the labs assume you have worked
-through that week's lectures first.
+- **Lesson pages** that develop the ideas and the mathematics in plain language.
+- **A hands-on lab** — the lesson opens in Google Colab with one click, so you run and
+  modify the code yourself in the browser, with a free GPU for the deep-learning week.
+- **A problem set**, delivered through GitHub Classroom and automatically graded, that
+  puts the method to work end to end.
 
 ## Tools
 
@@ -17,7 +18,8 @@ You will work entirely in the modern scientific-Python ecosystem:
 
 - **NumPy** and **SciPy** for numerical arrays, linear algebra, and signal processing.
 - **scikit-learn** for classical machine learning.
-- **PyTorch** for neural networks and deep learning.
+- **PyTorch** for neural networks and deep learning (optional — the deep-learning lab
+  runs a dependency-light NumPy demonstration, with PyTorch as an extension).
 - **Jupyter** notebooks as the interactive computing environment (run in Google Colab).
 - **GitHub** for version control, reproducibility, and sharing your work.
 

@@ -1,8 +1,8 @@
 # Schedule
 
 The eight weeks below pair the methods you will learn with the biomedical application
-that motivates them. Each row is a self-contained arc: the mathematics is introduced in
-lecture and then exercised on the corresponding data in that week's lab.
+that motivates them. Each row is a self-contained arc: the lesson introduces the
+mathematics, and its one-click Colab lab exercises it on the corresponding data.
 
 | Week | Methods | Biomedical application |
 |------|---------|------------------------|
