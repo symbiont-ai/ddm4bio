@@ -1,114 +1,84 @@
-# Problem Set 1 — Eigen-Recognition: Linear Systems and the SVD
+# Problem Set 1 — The Eigen-Subspace as a Model of Normal Cells
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/symbiont-ai/ddm4bio/blob/main/problem_sets/ps1_eigen_recognition/ps1_colab.ipynb)
 
 **Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
 
 **Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 2
-(linear systems, Gaussian elimination / LU, iterative solvers, and the singular
-value decomposition). Skim the sections on conditioning and on low-rank
-approximation before you start.
+(the SVD and low-rank approximation).
 
-This problem set has two threads that meet in the same idea. First you will
-solve a linear system `A x = b` two different ways and watch how the *method*
-you choose changes the cost and the numerical behaviour. Then you will use the
-singular value decomposition to build an "eigen-image" basis — the same machine
-behind eigenfaces — and turn it into a working recognizer for real
-peripheral-blood-cell microscopy crops (BloodMNIST): our literal "eigen-cells."
+Week 1 built an eigen-image basis and used it to *recognize* blood cells. This
+problem set keeps that basis but asks a different question: if the top principal
+axes capture what a **normal** cell looks like, what can the *residual* — the part
+that doesn't fit — tell us? You will put the same subspace to two new uses on real
+BloodMNIST.
 
-Everything is small, deterministic, and runs offline. Fill in the method logic
-in `student/ps1.py`; the imports, data loading, and quality-control plumbing are
-already wired for you. The autograder checks both the interfaces and
-numerical thresholds, and runs automatically when you push to GitHub Classroom.
+The eigen-basis primitives (`eigen_basis`, `project`, `reconstruct`) and the data
+loader are **provided** — this problem set is about what you *do* with the
+subspace, not rebuilding it. Fill in the functions marked `# TODO` in
+`student/ps1.py`. The autograder checks each on its own seeded fixtures, so keep
+the signatures exactly as given.
 
 ## Data
 
-Two sources, both offline-safe:
+Real **BloodMNIST** peripheral-blood-cell crops via `get_dataset("bloodmnist")`
+(MedMNIST v2, CC BY 4.0), converted to grayscale and split into a *normal-cell
+library* (train) and a held-out set. Real crops when the source is reachable, a
+labelled bundled fallback (same shape) otherwise — the source is printed so you
+always know which you got. Seed everything through `ddm4bio.seed_everything()`
+(already called in `main`).
 
-- **Synthetic SPD system** — `make_spd_system(n)` (provided) builds a symmetric
-  positive-definite matrix `A = M Mᵀ + n·I` and a right-hand side `b`. Symmetry
-  and positive-definiteness are what let conjugate gradient apply.
-- **BloodMNIST via `get_dataset("bloodmnist")`** — real peripheral-blood-cell
-  microscopy crops (MedMNIST v2, CC BY 4.0). `load_digits_split()` (provided)
-  pulls the library through the course data layer, converts each crop to
-  grayscale (mean over the colour axis), flattens it, and returns a
-  deterministic, stratified train/test split. When the download is unavailable
-  it transparently falls back to a bundled image stack with the *same payload
-  shape*, so the problem set and its autograder run offline and deterministically
-  (`get_dataset("bloodmnist", download=False)`). We use it as an honest
-  imaging-based cell-recognition task: low-resolution grayscale images with
-  known cell-type labels.
+## Part A — Denoise by low-rank projection
 
-Seed everything through `ddm4bio.seed_everything()` (already called in `main`).
+The clean image lives (approximately) in a few principal axes, while additive
+noise spreads across all of them. So projecting a noisy image onto the top-*k*
+eigen-subspace and reconstructing it keeps the signal and discards most of the
+noise — but only at the right rank: too few modes throw away signal, too many
+re-admit noise, so the SNR-vs-rank curve rises, peaks, and falls.
 
-## Part A — Method: two solvers and the eigen-image pipeline
+Implement:
 
-1. **Direct vs. iterative solve.** Implement `solve_direct` (an LU
-   factorization via `scipy.linalg.lu_factor` / `lu_solve`) and
-   `solve_iterative` (conjugate gradient via `scipy.sparse.linalg.cg`, counting
-   iterations with a callback). Then implement `compare_solvers`, which reports
-   the condition number of `A`, the residual `‖A x − b‖` for each solution, the
-   CG iteration count, the wall-clock time of each method, and whether the two
-   solutions agree. Understand *why* CG converges in relatively few iterations
-   here and how that would change if `A` were badly conditioned.
+- `snr_db(estimate, reference)` — signal-to-noise ratio in decibels,
+  `10·log10(‖reference‖² / ‖estimate − reference‖²)`.
+- `denoise(x_noisy, mean, components)` — project onto the subspace and reconstruct
+  (use the provided `project` / `reconstruct`).
+- `best_rank_for_denoising(x_train, x_noisy, x_clean, candidate_ks)` — the rank
+  whose denoising maximizes SNR against the clean images, and the SNR-vs-rank
+  curve. Understand *why* the curve is single-peaked.
 
-2. **Eigen-image pipeline.** Implement the three core steps of a linear
-   recognizer: `eigen_basis` (subtract the per-feature mean, then take the top
-   `n_modes` right singular vectors via `svd_lowrank` — these are the
-   eigen-images), `project` (express centered data in that basis), and
-   `reconstruct` (map basis coordinates back to pixel space). The basis rows
-   must be orthonormal, and projection followed by reconstruction with a
-   full-rank basis must return the original data.
+## Part B — Flag out-of-QC images by reconstruction error
 
-## Part B — Application: eigen-cells on blood-cell images
+An image that does not belong to the normal subspace reconstructs badly, so its
+**reconstruction error is a novelty score**. Use it to flag corrupted acquisitions
+(poor focus, saturation, sensor noise) before they contaminate an analysis.
 
-1. Implement `reconstruction_error_curve`: fit the eigen-basis on the **training**
-   split only, then measure the relative-L2 reconstruction error on the
-   **held-out test** split as the number of modes grows. The curve should fall
-   monotonically and reach ≈ 0 at full rank.
+Implement:
 
-2. Implement `eigen_nn_accuracy`: fit the basis on training data, project both
-   splits into the eigen-basis, and evaluate a 1-nearest-neighbour classifier on
-   the test split. With a modest number of modes this should land far above the
-   0.10 random-guess baseline for ten classes.
+- `reconstruction_anomaly_score(x, mean, components)` — per-image relative
+  reconstruction error against the normal subspace.
+- `detection_auc(scores, is_anomaly)` — ROC-AUC of the detector (chance 0.5,
+  perfect 1.0).
+- `flag_threshold(scores_normal, max_false_alarm)` — a cutoff set at the
+  `(1 − max_false_alarm)` quantile of the normal scores, which bounds the
+  false-alarm rate.
 
-## Part C — Quality control (required)
+## Quality control & interpretation (required)
 
-The provided `run_qc` prints a QC block **before** any results, and you supply
-the pieces it needs:
-
-- **Orthonormality.** Implement `check_orthonormality`, which compares the Gram
-  matrix `components · componentsᵀ` to the identity and returns the largest
-  off-diagonal entry and the largest deviation of a row norm from one.
-- **Reconstruction convergence.** `run_qc` confirms that a full-rank basis drives
-  the held-out reconstruction error to ~machine-zero — evidence the pipeline is
-  wired correctly.
-- **Leakage.** `run_qc` calls `ddm4bio.qc.assert_no_leakage` on the train/test
-  index sets. Explain in a comment why fitting the basis on training data only
-  (and never on the test split) is the leakage-safe choice.
-- **Class balance.** `run_qc` prints a `ddm4bio.qc` tabular report of the label
-  distribution. Note whether the cell-type classes are roughly balanced and what
-  that means for interpreting accuracy.
-
-## Part D — Interpretation & confidence
-
-Implement `modes_for_variance` to report the smallest number of modes reaching
-90%, 95%, and 99% of the cumulative variance (using
-`ddm4bio.methods.decomposition.explained_variance_ratio`). Then, in the
-interpretation block printed by `main` (via
-`ddm4bio.interpret.interpretation_block`), state: how aggressively the images
-compress, how trustworthy the nearest-neighbour classifier is given the QC
-evidence, and the honest limitations of reading these results as a claim about
-real cell imaging. Pick a confidence level and back it with the evidence you
-actually produced.
+The provided `run_qc` prints a **leakage-checked** block (the normal-cell library
+and the held-out set are disjoint) and a full-rank reconstruction sanity check
+*before* any results. The provided `main` closes with a
+`ddm4bio.interpret.interpretation_block`: state how much the denoising and
+detection results support the claim, pick an honest confidence level, and name the
+real limitations — the noise is synthetic additive Gaussian, the SNR gain and AUC
+are single held-out estimates, and the subspace is linear.
 
 ## Files
 
 - `student/ps1.py` — your working file; fill in every `# TODO`.
 - `rubric.md` — how this problem set is graded.
 - `ps1_colab.ipynb` — one-click Google Colab launcher (badge at the top).
-- The reference solution and the autograder (interfaces + numerical thresholds)
-  are provided through the course and run automatically by GitHub Classroom.
+- The reference solution and the autograder are provided through the course and
+  run automatically by GitHub Classroom.
 
 ## Running
 
