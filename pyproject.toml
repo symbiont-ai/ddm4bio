@@ -23,7 +23,7 @@ dependencies = [
 # installs only the core stack + dev tools so a clean clone sets up fast.
 # Area-specific heavy deps are opt-in, e.g. `pip install -e ".[dynamics]"`.
 [project.optional-dependencies]
-dev = ["ruff", "pytest", "pytest-cov", "nbmake", "jupytext", "mypy"]
+dev = ["ruff", "pytest", "pytest-cov", "nbmake", "jupytext", "mypy", "PyWavelets"]
 signals = ["PyWavelets", "mne", "wfdb"]
 singlecell = ["scanpy", "anndata"]
 dynamics = ["pysindy", "pydmd"]
