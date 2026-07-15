@@ -3,7 +3,7 @@
 Welcome. This is an applications-first course in modern computational science, told
 through the lens of biology and medicine. Rather than starting from abstract theory
 and hoping the examples land later, we start from problems a life scientist actually
-cares about — reading out cell types from single-cell data, denoising an MRI,
+cares about — reading out cell types from single-cell data, denoising a noisy ECG,
 forecasting an epidemic, picking a handful of biomarkers out of thousands — and then
 build up the mathematical and computational machinery needed to attack them.
 
