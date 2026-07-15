@@ -54,7 +54,7 @@ capstone/      spec, rubric, runnable template, and section linter
 data/          DATA_CARD.md + gitignored raw/ and cache/
 tests/         library + data-layer unit tests
 scripts/       fetch_data.py — warm the dataset cache
-docs/          conventions (METHOD_LABELING.md, INTERPRETATION.md) + LAUNCH.md runbook
+docs/          conventions (METHOD_LABELING.md, INTERPRETATION.md, DATA_AND_GROUND_TRUTH.md)
 .github/       CI + GitHub Pages deploy workflows
 ```
 

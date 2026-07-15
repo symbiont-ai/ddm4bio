@@ -7,6 +7,12 @@ registry one-row-per-key). Each loader tries the real source when
 synthetic/bundled fallback (`source="fallback"`); it never raises just because
 the real source is unavailable.
 
+> **Why real *and* synthetic?** See
+> [`docs/DATA_AND_GROUND_TRUTH.md`](../docs/DATA_AND_GROUND_TRUTH.md) for the
+> policy: real data for the application; synthetic fixtures only where a method's
+> correctness must be scored against a known ground truth; labeled fallbacks are
+> an offline safety net, kept off the published site by a CI guard.
+
 **Access tiers:** `open` (direct download, no login) · `archive` (frozen but
 downloadable) · `credentialed` (requires DUA/registration — **never**
 auto-downloaded; the loader raises `PermissionError` with apply-for-access
