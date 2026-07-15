@@ -33,7 +33,9 @@ jobs:
       - name: Install package and build dependencies
         run: |
           pip install -e ".[dev]"
-          pip install jupyter-book ipykernel matplotlib scikit-learn scipy PyWavelets
+          # Pin JupyterBook to v1: v2 is the mystmd rewrite with a different CLI
+          # and output path, which breaks `jupyter-book build book` -> book/_build/html.
+          pip install "jupyter-book>=1,<2" ipykernel matplotlib scikit-learn scipy PyWavelets
           # scanpy + anndata so weeks 5-6 render on the real pbmc3k single-cell data
           # (heavier build: pulls numba/llvmlite/h5py and downloads pbmc3k)
           pip install scanpy anndata
