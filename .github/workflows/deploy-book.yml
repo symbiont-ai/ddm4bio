@@ -39,6 +39,9 @@ jobs:
           # scanpy + anndata so weeks 5-6 render on the real pbmc3k single-cell data
           # (heavier build: pulls numba/llvmlite/h5py and downloads pbmc3k)
           pip install scanpy anndata
+          # wfdb so weeks 4 & 7 fetch the real MIT-BIH ECG from PhysioNet; without it
+          # get_dataset("mitbih") drops to a labeled synthetic fallback on the site.
+          pip install wfdb
 
       - name: Register IPython kernel
         run: |
