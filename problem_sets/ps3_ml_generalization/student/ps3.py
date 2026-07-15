@@ -1,472 +1,226 @@
-"""Student template for PS3: machine learning and generalization.
+"""Student template for PS3: from ranking to deciding.
 
-Fill in every function marked ``# TODO``. The public signatures must stay
-exactly as given -- the autograder imports these names and checks shapes,
-return keys, and performance thresholds.
+Week 3 measured how well a classifier *ranks* patients (AUC, generalization). But a
+deployed test does not rank -- it *decides*: it flags a patient or clears them, at a
+threshold. This problem set is about that decision and its traps, on the real UCI
+heart-disease cohort.
 
-What is already wired for you (do not rewrite):
-* :func:`true_function` and :func:`generate_synthetic_curve` -- the Part A data.
-* :func:`load_clinical_data` -- the bundled breast-cancer fixture the autograder
-  scores against.
-* :func:`run_tabular_qc` -- the quality-control call (Part C).
-* :func:`main` -- the end-to-end orchestration; it loads the real Part B/C cohort
-  via ``get_dataset("heart_uci")``, calls your functions in order, and prints the
-  interpretation block.
+- Part A -- **choosing the operating threshold**: pick a cutoff for a stated cost
+  trade-off and for a target sensitivity, and read off the sensitivity/specificity
+  you actually get.
+- Part B -- **the base-rate trap**: a threshold's sensitivity/specificity do not
+  depend on how common the disease is, but its predictive value does -- recompute
+  PPV / NPV as prevalence varies.
 
-What you implement: the model-fitting and evaluation logic (Parts A/B/C).
-
-Only numpy is imported at module top level; import scikit-learn, scipy, and
-pandas *inside* the function bodies. Keep everything offline, deterministic, and
-seeded.
-
-Reading: Kutz, *Data-Driven Modeling & Scientific Computation*, Ch. 6 (neural
-networks) and Ch. 13 (regression, model selection, cross-validation).
+Fill in every function body marked ``# TODO``. The classifier and its held-out
+scores (`load_heart_scores`), the QC driver, and `main` are provided -- this problem
+set is about what you *do* with the scores, not training the model. The autograder
+imports these functions by name, so keep the signatures exactly as given. Run with
+``python ps3.py``; it stops at the first unimplemented function.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
 
-from ddm4bio import seed_everything
-from ddm4bio.datasets import get_dataset
+from ddm4bio.config import GLOBAL_SEED, seed_everything
 from ddm4bio.interpret import interpretation_block
-from ddm4bio.methods.learning import (  # noqa: F401  (used by the functions you implement)
-    cross_validate,
-    learning_curve,
-    permutation_test,
-)
-from ddm4bio.qc.report import QCReport, assert_no_leakage  # noqa: F401  (assert_no_leakage: yours)
-from ddm4bio.qc.tabular import qc_tabular
 
-SEED = 20260714
+# --------------------------------------------------------------------------- #
+# Provided: real held-out scores + QC (do not edit)                            #
+# --------------------------------------------------------------------------- #
+
+
+def load_heart_scores(
+    test_size: float = 0.4, seed: int = GLOBAL_SEED
+) -> tuple[np.ndarray, np.ndarray, str]:
+    """Train a logistic model on real UCI heart data; return held-out scores.
+
+    Returns ``(scores, labels, source)`` -- predicted disease probabilities on the
+    held-out patients and their 0/1 labels. Missing values are mean-imputed.
+    """
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import train_test_split
+
+    from ddm4bio.datasets import get_dataset
+
+    ds = get_dataset("heart_uci", seed=seed)
+    x = np.asarray(ds.payload["X"], dtype=float)
+    x = np.where(np.isnan(x), np.nanmean(x, axis=0), x)
+    y = np.asarray(ds.payload["y"], dtype=int)
+    x_tr, x_te, y_tr, y_te = train_test_split(
+        x, y, test_size=test_size, random_state=seed, stratify=y
+    )
+    mean, std = x_tr.mean(axis=0), x_tr.std(axis=0) + 1e-12
+    clf = LogisticRegression(max_iter=2000).fit((x_tr - mean) / std, y_tr)
+    scores = clf.predict_proba((x_te - mean) / std)[:, 1]
+    return scores, y_te, ds.source
+
+
+def run_qc(scores: np.ndarray, labels: np.ndarray) -> None:
+    """Print a QC block before any results (provided)."""
+    from sklearn.metrics import roc_auc_score
+
+    in_range = bool(np.all((scores >= 0.0) & (scores <= 1.0)))
+    prevalence = float(np.mean(labels))
+    auc = float(roc_auc_score(labels, scores))
+    print(f"QC: {len(labels)} held-out patients, disease prevalence = {prevalence:.2f}.")
+    print(f"    scores are probabilities in [0, 1]: {in_range}; ranking AUC = {auc:.3f}.")
+    print("    AUC is threshold-free -- it says nothing about where to set the cutoff.")
 
 
 # --------------------------------------------------------------------------- #
-# Part A -- method on a known synthetic function
+# Part A -- Choosing the operating threshold  (you implement)                  #
 # --------------------------------------------------------------------------- #
-def true_function(x: np.ndarray) -> np.ndarray:
-    """Noise-free target function the models must learn (GIVEN -- do not edit).
 
-    ``sin(1.5 x) + 0.3 x``: smooth and easy to fit inside a bounded window, but
-    it diverges from any polynomial fit once evaluated outside that window.
+
+def sensitivity_specificity(scores: np.ndarray, labels: np.ndarray, threshold: float) -> dict:
+    """Sensitivity and specificity when patients with ``score >= threshold`` are flagged.
+
+    Sensitivity = TP / (TP + FN) (of the diseased, the fraction caught);
+    specificity = TN / (TN + FP) (of the healthy, the fraction cleared).
     """
-    x = np.asarray(x, dtype=float)
-    return np.sin(1.5 * x) + 0.3 * x
+    # TODO: flag rows where score >= threshold; count TP/FN/TN/FP against labels
+    # (1 = disease, 0 = healthy); return {"sensitivity": TP/(TP+FN),
+    # "specificity": TN/(TN+FP)}, guarding empty denominators.
+    raise NotImplementedError("Implement sensitivity_specificity.")
 
 
-def generate_synthetic_curve(
-    n_samples: int,
-    x_low: float,
-    x_high: float,
-    noise: float = 0.15,
-    seed: int | None = None,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Sample noisy observations of :func:`true_function` (GIVEN -- do not edit).
+def cost_optimal_threshold(
+    scores: np.ndarray,
+    labels: np.ndarray,
+    candidate_thresholds: list[float],
+    fn_cost: float,
+    fp_cost: float,
+) -> tuple[float, np.ndarray]:
+    """Threshold minimizing expected cost ``fn_cost * FN + fp_cost * FP``.
 
-    Returns ``X`` of shape ``(n_samples, 1)`` and ``y`` of shape ``(n_samples,)``.
+    Returns ``(best_threshold, cost_by_threshold)``. A high ``fn_cost`` (missing
+    disease is expensive) pushes the threshold down toward higher sensitivity.
     """
-    rng = np.random.default_rng(seed)
-    x = np.sort(rng.uniform(x_low, x_high, size=n_samples))
-    y = true_function(x) + rng.normal(0.0, noise, size=n_samples)
-    return x.reshape(-1, 1), y
+    # TODO: for each candidate threshold, count FN and FP and form the weighted
+    # cost; best_threshold is the candidate with the smallest cost. Return
+    # (best_threshold, cost_by_threshold as an array).
+    raise NotImplementedError("Implement cost_optimal_threshold.")
 
 
-def fit_polynomial(X: np.ndarray, y: np.ndarray, degree: int) -> Any:
-    """Fit an ordinary least-squares polynomial of the given ``degree``.
+def threshold_for_sensitivity(
+    scores: np.ndarray,
+    labels: np.ndarray,
+    candidate_thresholds: list[float],
+    target_sensitivity: float,
+) -> float:
+    """Most specific threshold whose sensitivity is at least ``target_sensitivity``.
 
-    Return a *fitted* scikit-learn estimator with a ``predict`` method. The
-    standard recipe is a pipeline of ``PolynomialFeatures(degree)`` followed by
-    ``LinearRegression``.
-
-    Parameters
-    ----------
-    X : np.ndarray, shape (n_samples, 1)
-    y : np.ndarray, shape (n_samples,)
-    degree : int
-
-    Returns
-    -------
-    estimator
-        Fitted polynomial regression pipeline.
+    Among thresholds that catch enough of the diseased, pick the highest (most
+    specific). Fall back to the lowest candidate if none qualify.
     """
-    # TODO: import LinearRegression, PolynomialFeatures, make_pipeline from
-    # sklearn; build the pipeline; call .fit(X, y); return the fitted model.
-    raise NotImplementedError
-
-
-def fit_small_nn(
-    X: np.ndarray,
-    y: np.ndarray,
-    hidden_layer_sizes: tuple[int, ...] = (32, 32),
-    seed: int | None = None,
-) -> Any:
-    """Fit a small multilayer-perceptron regressor.
-
-    Return a *fitted* estimator. Scale the inputs first (a ``StandardScaler`` in
-    a pipeline with ``MLPRegressor``); pass ``random_state=seed`` so results are
-    deterministic, and allow enough iterations to converge.
-
-    Parameters
-    ----------
-    X : np.ndarray, shape (n_samples, 1)
-    y : np.ndarray, shape (n_samples,)
-    hidden_layer_sizes : tuple of int
-    seed : int, optional
-
-    Returns
-    -------
-    estimator
-        Fitted MLP regression pipeline.
-    """
-    # TODO: build StandardScaler + MLPRegressor(hidden_layer_sizes, random_state=
-    # seed, max_iter large enough); fit and return it.
-    raise NotImplementedError
-
-
-def interp_vs_extrap_error(
-    model: Any,
-    x_low: float,
-    x_high: float,
-    pad: float | None = None,
-    n_eval: int = 400,
-    seed: int | None = None,
-) -> dict[str, float]:
-    """Compare a fitted model's error inside vs. just outside its training domain.
-
-    Draw fresh evaluation points: interpolation points inside ``[x_low, x_high]``
-    and extrapolation points inside ``[x_high, x_high + pad]`` (``pad`` defaults
-    to half the training width). Score each against :func:`true_function` with
-    mean squared error.
-
-    Returns
-    -------
-    dict
-        Keys ``"interp_mse"`` and ``"extrap_mse"`` (floats).
-    """
-    # TODO: draw x_in and x_out with a seeded np.random.default_rng; predict with
-    # the model on each region; return the two MSEs against true_function(...).
-    raise NotImplementedError
-
-
-def kfold_cv(
-    estimator: Any,
-    X: np.ndarray,
-    y: np.ndarray,
-    cv: int = 5,
-    scoring: str | None = None,
-    seed: int | None = None,
-) -> dict[str, Any]:
-    """k-fold cross-validation via ``ddm4bio.methods.learning.cross_validate``.
-
-    Returns
-    -------
-    dict
-        Keys ``"scores"``, ``"mean"``, ``"std"``.
-    """
-    # TODO: call cross_validate(estimator, X, y, cv=cv, scoring=scoring, seed=seed)
-    # and return its result.
-    raise NotImplementedError
-
-
-def model_learning_curve(
-    estimator: Any,
-    X: np.ndarray,
-    y: np.ndarray,
-    train_sizes: np.ndarray | None = None,
-    cv: int = 5,
-    seed: int | None = None,
-) -> dict[str, np.ndarray]:
-    """Learning curve via ``ddm4bio.methods.learning.learning_curve``.
-
-    Returns
-    -------
-    dict
-        Keys ``"train_sizes"``, ``"train_scores"``, ``"val_scores"``.
-    """
-    # TODO: call learning_curve(estimator, X, y, train_sizes=train_sizes, cv=cv,
-    # seed=seed) and return its result.
-    raise NotImplementedError
+    # TODO: keep the candidate thresholds whose sensitivity_specificity(...)
+    # sensitivity >= target_sensitivity; return the largest such threshold (or the
+    # smallest candidate if none qualify).
+    raise NotImplementedError("Implement threshold_for_sensitivity.")
 
 
 # --------------------------------------------------------------------------- #
-# Part B -- clinical application on load_breast_cancer
+# Part B -- The base-rate trap  (you implement)                                #
 # --------------------------------------------------------------------------- #
-def load_clinical_data() -> tuple[np.ndarray, np.ndarray, list[str]]:
-    """Load the bundled breast-cancer diagnostic dataset (GIVEN -- do not edit).
 
-    Returns ``X`` (569, 30), binary ``y`` (569,), and the 30 feature names.
+
+def ppv_at_prevalence(sensitivity: float, specificity: float, prevalence: float) -> float:
+    """Positive predictive value at a given disease ``prevalence`` (Bayes' rule).
+
+    PPV = (sens * prev) / (sens * prev + (1 - spec) * (1 - prev)).
     """
-    from sklearn.datasets import load_breast_cancer
-
-    data = load_breast_cancer()
-    X = np.asarray(data.data, dtype=float)
-    y = np.asarray(data.target, dtype=int)
-    feature_names = list(data.feature_names)
-    return X, y, feature_names
+    # TODO: apply the Bayes formula above; guard a zero denominator.
+    raise NotImplementedError("Implement ppv_at_prevalence.")
 
 
-def build_models(seed: int | None = None) -> dict[str, Any]:
-    """Construct the three classifiers compared in Part B.
+def npv_at_prevalence(sensitivity: float, specificity: float, prevalence: float) -> float:
+    """Negative predictive value at a given disease ``prevalence`` (Bayes' rule).
 
-    Each should be a pipeline that *imputes* missing values and standardizes
-    features first (the real clinical table carries a few missing entries; a
-    ``SimpleImputer`` as the first step keeps the pipeline leakage-safe and is a
-    no-op when nothing is missing), then applies:
-    * ``"linear"``      -- a nearly *unregularized* logistic regression
-      (use a very large ``C``);
-    * ``"nn"``          -- a shallow ``MLPClassifier`` (one small hidden layer,
-      ``random_state=seed``);
-    * ``"regularized"`` -- a *strongly* penalized logistic regression
-      (small ``C``, e.g. 0.05).
-
-    Return the three *unfitted* estimators.
-
-    Returns
-    -------
-    dict
-        Keys ``"linear"``, ``"nn"``, ``"regularized"``.
+    NPV = (spec * (1 - prev)) / (spec * (1 - prev) + (1 - sens) * prev).
     """
-    # TODO: build the three pipelines described above, each led by a
-    # SimpleImputer(strategy="median") then a StandardScaler, and return them in
-    # a dict with exactly these three keys.
-    raise NotImplementedError
+    # TODO: apply the Bayes formula above; guard a zero denominator.
+    raise NotImplementedError("Implement npv_at_prevalence.")
 
 
-def performance_vs_n(
-    estimator: Any,
-    X: np.ndarray,
-    y: np.ndarray,
-    train_sizes: np.ndarray | None = None,
-    cv: int = 5,
-    seed: int | None = None,
-) -> dict[str, np.ndarray]:
-    """Trace validation performance as the training-set size ``n`` grows.
-
-    Use :func:`model_learning_curve`, then reduce the per-fold score matrices to
-    their per-size means.
-
-    Returns
-    -------
-    dict
-        Keys ``"train_sizes"``, ``"train_mean"``, ``"val_mean"`` (1-D arrays).
-    """
-    # TODO: default train_sizes to np.linspace(0.1, 1.0, 6) if None; call
-    # model_learning_curve; return train_sizes plus the mean over axis=1 of the
-    # train and val score matrices.
-    raise NotImplementedError
+def ppv_curve(sensitivity: float, specificity: float, prevalences: list[float]) -> np.ndarray:
+    """PPV across a range of prevalences at fixed sensitivity/specificity."""
+    # TODO: return np.array([ppv_at_prevalence(sensitivity, specificity, p)
+    # for p in prevalences]).
+    raise NotImplementedError("Implement ppv_curve.")
 
 
 # --------------------------------------------------------------------------- #
-# Part C -- quality control
+# Provided: driver                                                             #
 # --------------------------------------------------------------------------- #
-def run_tabular_qc(X: np.ndarray, y: np.ndarray, feature_names: list[str]) -> QCReport:
-    """Assemble a DataFrame and run ``qc_tabular`` (GIVEN -- do not edit)."""
-    import pandas as pd
-
-    df = pd.DataFrame(X, columns=list(feature_names))
-    df["target"] = y
-    return qc_tabular(df)
 
 
-def make_splits(
-    X: np.ndarray,
-    y: np.ndarray,
-    val_size: float = 0.2,
-    test_size: float = 0.2,
-    seed: int | None = None,
-) -> dict[str, Any]:
-    """Stratified train/validation/test split with an explicit leakage guard.
-
-    Split the *indices* ``np.arange(n)`` (so you can verify no overlap): first
-    hold out a test set, then split the remainder into train and validation.
-    Call :func:`ddm4bio.qc.report.assert_no_leakage` on each pair of index sets.
-
-    Returns
-    -------
-    dict
-        ``X_train/y_train/X_val/y_val/X_test/y_test`` and
-        ``train_idx/val_idx/test_idx``.
-    """
-    # TODO: use sklearn.model_selection.train_test_split on the index array with
-    # stratify=y; rescale val_size relative to the remaining pool; call
-    # assert_no_leakage on every pair; return the split arrays and indices.
-    raise NotImplementedError
-
-
-def _auc(estimator: Any, X: np.ndarray, y: np.ndarray) -> float:
-    """Area under the ROC curve using probabilities or decision scores."""
-    # TODO: use predict_proba(X)[:, 1] when available, else decision_function(X);
-    # return roc_auc_score(y, scores) as a float.
-    raise NotImplementedError
-
-
-def generalization_gap(estimator: Any, splits: dict[str, Any]) -> dict[str, float]:
-    """Fit on train and report the train/validation/test ROC-AUC gap.
-
-    Returns
-    -------
-    dict
-        Keys ``"train_auc"``, ``"val_auc"``, ``"test_auc"``, and ``"gap"``
-        (train minus validation AUC).
-    """
-    # TODO: fit the estimator on the train split only; compute AUC on each split
-    # via _auc; return the three AUCs and gap = train_auc - val_auc.
-    raise NotImplementedError
-
-
-def calibration_report(
-    estimator: Any,
-    X_train: np.ndarray,
-    y_train: np.ndarray,
-    X_test: np.ndarray,
-    y_test: np.ndarray,
-    n_bins: int = 10,
-) -> dict[str, Any]:
-    """Assess how well predicted probabilities match observed frequencies.
-
-    Fit on train, predict probabilities on test, then build a reliability curve
-    and a Brier score.
-
-    Returns
-    -------
-    dict
-        Keys ``"prob_true"``, ``"prob_pred"`` (reliability arrays) and
-        ``"brier"`` (Brier score; lower is better).
-    """
-    # TODO: fit; prob = predict_proba(X_test)[:, 1]; use
-    # sklearn.calibration.calibration_curve and sklearn.metrics.brier_score_loss.
-    raise NotImplementedError
-
-
-def permutation_beats_chance(
-    estimator: Any,
-    X: np.ndarray,
-    y: np.ndarray,
-    n_perm: int = 200,
-    cv: int = 5,
-    scoring: str | None = None,
-    seed: int | None = None,
-) -> dict[str, Any]:
-    """Permutation test via ``ddm4bio.methods.learning.permutation_test``.
-
-    Returns
-    -------
-    dict
-        Keys ``"observed_score"``, ``"permutation_scores"``, ``"p_value"``.
-    """
-    # TODO: call permutation_test(estimator, X, y, n_perm=n_perm, cv=cv,
-    # scoring=scoring, seed=seed) and return its result.
-    raise NotImplementedError
-
-
-# --------------------------------------------------------------------------- #
-# Orchestration / demonstration (GIVEN -- do not edit)
-# --------------------------------------------------------------------------- #
 def main() -> None:
-    """Run the full PS3 analysis end to end and print an interpretation block."""
-    seed_everything(SEED)
+    """Choose an operating point on real heart data and expose the base-rate trap."""
+    seed_everything()
+    scores, labels, source = load_heart_scores()
+    print(f"Application data: UCI Heart Disease via get_dataset -> source={source}\n")
 
-    # ----- Part A: interpolation vs. extrapolation on a known function ----- #
-    x_low, x_high = 0.0, 2.0 * np.pi
-    X_tr, y_tr = generate_synthetic_curve(80, x_low, x_high, noise=0.15, seed=SEED)
+    print("== Quality control (before results) ==")
+    run_qc(scores, labels)
 
-    poly = fit_polynomial(X_tr, y_tr, degree=9)
-    nn_reg = fit_small_nn(X_tr, y_tr, hidden_layer_sizes=(32, 32), seed=SEED)
+    grid = [round(float(t), 2) for t in np.linspace(0.05, 0.95, 19)]
 
-    poly_err = interp_vs_extrap_error(poly, x_low, x_high, seed=SEED)
-    nn_err = interp_vs_extrap_error(nn_reg, x_low, x_high, seed=SEED)
-
-    print("== Part A: interpolation vs. extrapolation ==")
-    print(
-        f"polynomial(deg=9): interp MSE={poly_err['interp_mse']:.4f}  "
-        f"extrap MSE={poly_err['extrap_mse']:.4f}"
-    )
-    print(
-        f"small NN         : interp MSE={nn_err['interp_mse']:.4f}  "
-        f"extrap MSE={nn_err['extrap_mse']:.4f}"
-    )
-
-    # ----- Part B: clinical application (real biomedical data via get_dataset) ----- #
-    # download=True fetches and caches the real UCI Heart Disease (processed
-    # Cleveland) CSV, so this run uses the genuine 303x13 clinical cohort. If the
-    # network or its optional deps are unavailable, get_dataset falls back
-    # gracefully to a labeled synthetic table with the same (X, y) payload shape,
-    # so your functions below work the same either way.
-    ds = get_dataset("heart_uci", download=True)
-    print("== Data provenance ==")
-    print(f"source:     {ds.source}")
-    print(f"provenance: {ds.provenance}")
-    X = ds.payload["X"].to_numpy(dtype=float)  # (303, 13); real data may hold NaNs
-    y = ds.payload["y"].to_numpy()
-    feature_names = list(ds.payload["X"].columns)
-
-    print("\n== Quality control (run BEFORE modeling) ==")
-    report = run_tabular_qc(X, y, feature_names)
-    print(report.render())
-
-    models = build_models(seed=SEED)
-    print("\n== Part B: cross-validated ROC-AUC on heart disease ==")
-    for name, est in models.items():
-        cv_res = kfold_cv(est, X, y, cv=5, scoring="roc_auc", seed=SEED)
-        print(f"{name:>12}: AUC = {cv_res['mean']:.3f} +/- {cv_res['std']:.3f}")
-
-    pvn = performance_vs_n(models["regularized"], X, y, cv=5, seed=SEED)
-    print("\nvalidation accuracy vs n (regularized):")
-    for n_i, v_i in zip(pvn["train_sizes"], pvn["val_mean"]):
-        print(f"  n={int(n_i):>4}: val acc = {v_i:.3f}")
-
-    # ----- Part C: generalization gap, calibration, permutation test ----- #
-    splits = make_splits(X, y, seed=SEED)
-    gap = generalization_gap(build_models(seed=SEED)["regularized"], splits)
-    print("\n== Part C: generalization gap (regularized) ==")
-    print(
-        f"train AUC={gap['train_auc']:.3f}  val AUC={gap['val_auc']:.3f}  "
-        f"test AUC={gap['test_auc']:.3f}  gap={gap['gap']:.3f}"
-    )
-
-    calib = calibration_report(
-        build_models(seed=SEED)["regularized"],
-        splits["X_train"],
-        splits["y_train"],
-        splits["X_test"],
-        splits["y_test"],
-    )
-    print(f"Brier score (test) = {calib['brier']:.4f}")
-
-    perm = permutation_beats_chance(
-        build_models(seed=SEED)["regularized"], X, y, n_perm=200, scoring="roc_auc", seed=SEED
-    )
-    print(
-        f"permutation test: observed AUC={perm['observed_score']:.3f}  "
-        f"p-value={perm['p_value']:.4f}"
-    )
-
-    # ----- Part D: interpretation ----- #
-    print("\n== Part D: interpretation ==")
-    print(
-        interpretation_block(
-            claim=("State here whether the classifier generalizes, and to what."),
-            confidence="moderate",
-            limitations_list=[
-                "Name the real limitations you observed (dataset size, no external "
-                "cohort, extrapolation failure, threshold/calibration, ...).",
-            ],
-            evidence=(
-                f"5-fold CV AUC {perm['observed_score']:.3f} with permutation "
-                f"p={perm['p_value']:.4f}; train-val AUC gap {gap['gap']:.3f}; "
-                f"Brier {calib['brier']:.3f}."
-            ),
+    print("\n== Part A: choosing the operating threshold ==")
+    for t in (0.3, 0.5, 0.7):
+        ss = sensitivity_specificity(scores, labels, t)
+        print(
+            f"    threshold={t}: sensitivity={ss['sensitivity']:.2f} "
+            f"specificity={ss['specificity']:.2f}"
         )
+    best_cost, _curve = cost_optimal_threshold(scores, labels, grid, fn_cost=5.0, fp_cost=1.0)
+    ss_cost = sensitivity_specificity(scores, labels, best_cost)
+    print(
+        f"  cost-optimal threshold (a missed case costs 5x a false alarm) = {best_cost}: "
+        f"sensitivity={ss_cost['sensitivity']:.2f} specificity={ss_cost['specificity']:.2f}"
     )
+    t90 = threshold_for_sensitivity(scores, labels, grid, target_sensitivity=0.9)
+    ss90 = sensitivity_specificity(scores, labels, t90)
+    print(
+        f"  threshold for >=90% sensitivity = {t90}: "
+        f"sensitivity={ss90['sensitivity']:.2f} specificity={ss90['specificity']:.2f}"
+    )
+
+    print("\n== Part B: the base-rate trap ==")
+    sens, spec = ss_cost["sensitivity"], ss_cost["specificity"]
+    prevalences = [0.5, 0.2, 0.1, 0.05, 0.02]
+    ppvs = ppv_curve(sens, spec, prevalences)
+    print(f"  at the cost-optimal operating point (sens={sens:.2f}, spec={spec:.2f}):")
+    for p, v in zip(prevalences, ppvs):
+        print(f"    prevalence={p:>4.2f}  PPV={v:.2f}")
+    npv_screen = npv_at_prevalence(sens, spec, 0.02)
+    print(f"  NPV at screening prevalence 0.02 = {npv_screen:.3f}")
+
+    print("\n== Interpretation ==")
+    block = interpretation_block(
+        claim=(
+            f"The same heart-disease classifier decides differently depending on the "
+            f"question: a cost-optimal cutoff reaches {sens:.0%} sensitivity, but its "
+            f"positive predictive value falls from {ppvs[0]:.2f} in a high-prevalence clinic "
+            f"to {ppvs[-1]:.2f} at screening prevalence -- the same test, a very different tool."
+        ),
+        confidence="high",
+        limitations_list=[
+            "Sensitivity and specificity are single held-out estimates (n small); a "
+            "different split shifts the chosen threshold.",
+            "The cost ratio and target sensitivity are stipulated, not derived from a real "
+            "clinical utility model.",
+            "PPV/NPV assume the held-out sensitivity/specificity transfer unchanged to the "
+            "new-prevalence population, which distribution shift can violate.",
+        ],
+        evidence=(
+            "threshold-swept sensitivity/specificity on real data, a cost-minimizing "
+            "operating point, and Bayes' PPV/NPV across prevalences"
+        ),
+    )
+    print(block)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except NotImplementedError:
-        print(
-            "Reached an unimplemented function. Fill in the TODOs in this file, "
-            "then re-run. Start with fit_polynomial and work top to bottom."
-        )
+    main()

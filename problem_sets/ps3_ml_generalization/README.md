@@ -1,129 +1,80 @@
-# PS3 — Machine Learning and Generalization
+# PS3 — From Ranking to Deciding: Thresholds and the Base-Rate Trap
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/symbiont-ai/ddm4bio/blob/main/problem_sets/ps3_ml_generalization/ps3_colab.ipynb)
 
 **Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
 
-**Reading:** Kutz, *Data-Driven Modeling & Scientific Computation for the Life
-Sciences*, Chapter 6 (neural networks) and Chapter 13 (regression, model
-selection, and cross-validation).
+**Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 13
+(regression, model evaluation), plus any introduction to sensitivity, specificity,
+and Bayes' rule for predictive values.
 
-A model that scores well on the data it was trained on has told you almost
-nothing. The only question that matters for a deployed model is whether it works
-on data it has never seen. This problem set is about that question from two
-angles: first on a synthetic function where you know the ground truth exactly,
-then on a real clinical dataset where you do not. Along the way you will build
-the honest machinery — cross-validation, learning curves, a leakage-free
-train/validation/test split, calibration, and a permutation test — that lets you
-say *how confident* you should be, and why.
+Week 3 measured how well a classifier **ranks** patients (AUC, generalization). But
+a deployed test does not rank — it **decides**: it flags a patient or clears them,
+at a threshold. AUC is silent on where that threshold goes, and on how the same test
+behaves in a different population. This problem set is about the decision and its
+traps, on the real UCI heart-disease cohort.
 
-You will implement your functions in `student/ps3.py`. The public function
-signatures are fixed; the autograder imports them by name and checks both their
-return shapes and their performance against thresholds; it runs automatically
-when you push to GitHub Classroom.
+The trained classifier and its held-out scores (`load_heart_scores`) are
+**provided** — this problem set is about what you *do* with the scores, not training
+the model. Fill in the functions marked `# TODO` in `student/ps3.py`. The autograder
+checks each on small hand-verified inputs, so keep the signatures exactly as given.
 
-## Data (everything offline)
+## Data
 
-No downloads, no network, no credentials.
+Real **UCI Heart Disease** (Cleveland) via `get_dataset("heart_uci")` — 303 patients
+× 13 clinical features, binary disease label. `load_heart_scores` mean-imputes the
+missing values, standardizes, trains a logistic model, and returns the held-out
+predicted probabilities and labels. Seed everything through
+`ddm4bio.seed_everything()` (called in `main`).
 
-- **Part A** uses a synthetic 1-D function generated locally,
-  `true_function(x) = sin(1.5·x) + 0.3·x`, sampled with additive Gaussian noise
-  by `generate_synthetic_curve(...)`. Both are already implemented for you so the
-  ground truth is fixed and shared across the two models.
-- **Parts B–C** pull a real biomedical cohort through the course dataset layer:
-  `get_dataset("heart_uci", download=False)` (the UCI Heart Disease processed
-  Cleveland cohort — 303 patients, 13 clinical features, a binary
-  disease-present target). With `download=False` the loader stays offline and
-  deterministic, returning a labeled synthetic fallback with the **same payload
-  shape** (`ds.payload["X"]` a 303×13 table, `ds.payload["y"]` a binary label);
-  passing `download=True` fetches and caches the real CSV instead. The provided
-  `main()` prints `ds.source`/`ds.provenance` so you always see which you got.
-- The course autograder validates the evaluation machinery against the
-  bundled, well-separated `load_breast_cancer` fixture (569 samples, 30
-  features), which also loads offline; `load_clinical_data()` is provided for it.
+## Part A — Choosing the operating threshold
 
-Everything is seeded with `GLOBAL_SEED = 20260714`; call
-`ddm4bio.seed_everything()` before any stochastic step (the provided `main()`
-already does).
+AUC is threshold-free; a clinic needs a cutoff. Implement:
 
-## Part A — Method: interpolation vs. extrapolation
+- `sensitivity_specificity(scores, labels, threshold)` — flag `score >= threshold`;
+  return sensitivity (of the diseased, the fraction caught) and specificity (of the
+  healthy, the fraction cleared).
+- `cost_optimal_threshold(scores, labels, candidate_thresholds, fn_cost, fp_cost)` —
+  the threshold minimizing `fn_cost·FN + fp_cost·FP`, and the cost curve. A costlier
+  missed case pushes the cutoff down toward higher sensitivity.
+- `threshold_for_sensitivity(scores, labels, candidate_thresholds, target)` — the
+  most specific threshold whose sensitivity meets a clinical floor.
 
-Fit **two** models to the *same* noisy samples of `true_function` on the window
-`[0, 2π]`:
+## Part B — The base-rate trap
 
-1. `fit_polynomial(X, y, degree)` — an ordinary least-squares polynomial
-   (degree 9 in the demo).
-2. `fit_small_nn(X, y, hidden_layer_sizes, seed)` — a small multilayer
-   perceptron (scale the inputs first; seed it for determinism).
+A threshold's sensitivity and specificity do not depend on how common the disease
+is — but its **predictive value** does. Implement:
 
-Then quantify the difference between **interpolation** and **extrapolation** with
-`interp_vs_extrap_error(model, x_low, x_high, ...)`: draw fresh points *inside*
-the training window and fresh points *just beyond* it, and report the mean
-squared error of each against the known true function. You should see the
-polynomial fit beautifully inside the window and then diverge violently outside
-it, while the bounded neural network degrades far more gently. This is the
-generalization lesson in miniature: low training error tells you nothing about
-behavior outside the domain you trained on.
+- `ppv_at_prevalence(sensitivity, specificity, prevalence)` — Bayes' positive
+  predictive value.
+- `npv_at_prevalence(sensitivity, specificity, prevalence)` — Bayes' negative
+  predictive value.
+- `ppv_curve(sensitivity, specificity, prevalences)` — PPV across prevalences,
+  exposing how a great referral-clinic test can be near-useless for screening.
 
-Finally, implement the two evaluation tools you will reuse in Part B by wrapping
-the course library:
+## Quality control & interpretation (required)
 
-- `kfold_cv(estimator, X, y, cv, scoring, seed)` → `ddm4bio.methods.learning.cross_validate`.
-- `model_learning_curve(estimator, X, y, train_sizes, cv, seed)` →
-  `ddm4bio.methods.learning.learning_curve`.
+The provided `run_qc` reports the held-out prevalence and the ranking AUC, and notes
+that AUC says nothing about the cutoff — printed before any result. The provided
+`main` closes with a `ddm4bio.interpret.interpretation_block`: state how much the
+operating-point analysis supports the claim, at an honest confidence level, and name
+the real limitations — sensitivity/specificity are small-sample estimates, the cost
+ratio is stipulated, and PPV/NPV assume the operating characteristics transfer to the
+new-prevalence population (distribution shift can violate this).
 
-## Part B — Application: predict a clinical outcome
+## Files
 
-On the `get_dataset("heart_uci")` cohort, build three classifiers in
-`build_models(seed)`, each a pipeline that imputes missing values (a
-`SimpleImputer` first step — the real table has a few gaps) and standardizes the
-features:
+- `student/ps3.py` — your working file; fill in every `# TODO`.
+- `rubric.md` — how this problem set is graded.
+- `ps3_colab.ipynb` — one-click Google Colab launcher (badge at the top).
+- The reference solution and the autograder are provided through the course and
+  run automatically by GitHub Classroom.
 
-- `"linear"` — a nearly **unregularized** logistic regression (very large `C`).
-- `"nn"` — a **shallow** neural network (`MLPClassifier`, one small hidden layer).
-- `"regularized"` — a **strongly penalized** logistic regression (small `C`).
+## Running
 
-Report each model's cross-validated ROC-AUC with your `kfold_cv`. Then use
-`performance_vs_n(...)` (built on your learning-curve wrapper) to trace how
-validation performance grows as the number of training examples `n` increases —
-the empirical answer to "how much data is enough?"
+```bash
+python student/ps3.py          # runs until the first unimplemented function
+```
 
-## Part C — Quality control (required)
-
-Quality control is not optional and comes *before* you trust any number.
-
-1. **QC report first.** `run_tabular_qc(X, y, feature_names)` (provided) prints a
-   `ddm4bio.qc` report — shape, missingness, duplicates, class balance, outliers —
-   before any modeling. No result without QC.
-2. **No leakage.** Implement `make_splits(...)` to produce a stratified
-   train/validation/test partition and verify with
-   `ddm4bio.qc.report.assert_no_leakage` that no sample appears in two splits.
-3. **Generalization gap.** `generalization_gap(estimator, splits)` fits on train
-   only and reports train, validation, and test AUC plus the train-minus-val
-   gap — your estimate of optimism.
-4. **Calibration.** `calibration_report(...)` returns a reliability curve and a
-   Brier score: are the predicted probabilities honest, or merely well-ranked?
-5. **Beats chance.** `permutation_beats_chance(...)` wraps
-   `ddm4bio.methods.learning.permutation_test` to show the cross-validated score
-   is significantly better than the score under randomly shuffled labels.
-
-## Part D — Interpretation & confidence
-
-Close with an interpretation block built via
-`ddm4bio.interpret.interpretation_block(...)` (the provided `main()` shows the
-shape). In your own words, answer:
-
-- **Does it generalize?** Cite the CV AUC, the permutation p-value, the
-  train/val/test gap, and the Brier score — not just the headline number.
-- **At what `n` does overfitting stop mattering?** Read it off your learning
-  curve: where does the validation score plateau?
-- **Deployment confidence.** State a confidence level (`low`/`moderate`/`high`)
-  and name the real limitations — including what Part A taught you about
-  extrapolation beyond the observed feature range.
-
-## What to submit
-
-Only edit `student/ps3.py`. Run it directly (`python student/ps3.py`) to see the
-full pipeline once your TODOs are filled in, or work in the browser via the Colab
-badge at the top. The autograder runs automatically when you push to GitHub
-Classroom.
+To work in the browser instead, click the Colab badge at the top of this file.
+The autograder runs automatically when you push to GitHub Classroom.
