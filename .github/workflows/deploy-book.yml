@@ -51,6 +51,24 @@ jobs:
         run: |
           jupyter-book build book
 
+      - name: Guard against silent data fallbacks
+        run: |
+          # When a real dataset fetch fails on the runner (a heavy dep missing here,
+          # or a source/network outage), get_dataset returns a LABELED synthetic
+          # fallback: source="fallback" and a provenance beginning
+          # "synthetic/bundled fallback:". Those strings render in a lesson's OUTPUT
+          # only when a real fetch actually failed -- unlike the deliberate synthetic
+          # ground-truth fixtures (make_sparse_signal, injected sources), which never
+          # emit them. Fail the deploy so a regressed (fallback) site is never
+          # published. If a lesson ever intentionally ships a fallback dataset,
+          # narrow this pattern or scope it past that page.
+          pattern='source[[:space:]=:]+fallback|synthetic/bundled fallback:'
+          if grep -rInoE "$pattern" book/_build/html/lessons/; then
+            echo "::error::A lesson fell back to synthetic data on the build runner (a real dataset fetch failed -- most likely a heavy dependency missing from this workflow's pip install, e.g. wfdb or scanpy). The site was NOT published; fix the install and re-run."
+            exit 1
+          fi
+          echo "Data-fallback guard passed: every lesson dataset fetched real."
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
         with:
