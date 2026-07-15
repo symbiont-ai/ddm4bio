@@ -16,9 +16,9 @@ jobs:
       - name: Install package with dev extras
         run: pip install -e ".[dev]"
       - name: ruff check
-        run: ruff check src tests
+        run: ruff check src tests problem_sets capstone scripts
       - name: ruff format --check
-        run: ruff format --check src tests
+        run: ruff format --check src tests problem_sets capstone scripts
 
   unit:
     name: Unit tests
@@ -34,8 +34,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install package with dev extras
         run: pip install -e ".[dev]"
-      - name: Run pytest (offline; no network)
-        run: pytest -q
+      - name: Run pytest with coverage (offline; no network)
+        run: pytest -q --cov=ddm4bio --cov-report=term-missing --cov-fail-under=85
 
   # notebooks-fast:
   #   # Manual-only placeholder. Credentialed / network dataset jobs are kept
