@@ -5,7 +5,10 @@ copyright: "2026, Symbiont-AI Cognitive Labs"
 
 execute:
   execute_notebooks: force
-  timeout: 120
+  # Headroom for a slow runner; the deploy also pre-warms the dataset cache so
+  # notebook cells read cached data instead of downloading inside a timed cell
+  # (a cold BloodMNIST fetch once exceeded the old 120s limit and broke wk1).
+  timeout: 300
 
 html:
   use_repository_button: true

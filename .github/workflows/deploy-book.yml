@@ -47,11 +47,20 @@ jobs:
         run: |
           python -m ipykernel install --user --name python3 --display-name "Python 3"
 
+      - name: Warm the dataset cache
+        run: |
+          # Download the datasets the lessons use INTO THE CACHE before the timed
+          # build, so notebook cells read cached data instead of downloading inside
+          # a timeout-limited cell (a cold BloodMNIST fetch once exceeded the cell
+          # timeout and broke wk1). This step has no per-cell timeout. Only the
+          # lesson datasets are warmed -- not heavy unused ones (TCGA/MNE/IXI).
+          python -c "from ddm4bio.datasets import get_dataset; [print('  ['+get_dataset(k).source+']', k) for k in ['bloodmnist','breast_wisconsin','gdsc','heart_uci','jhu_covid','mitbih','pbmc3k']]"
+
       - name: Build the book
         run: |
           jupyter-book build book
 
-      - name: Guard against silent data fallbacks
+      - name: Guard against fallbacks and lesson errors
         run: |
           # When a real dataset fetch fails on the runner (a heavy dep missing here,
           # or a source/network outage), get_dataset returns a LABELED synthetic
@@ -67,7 +76,14 @@ jobs:
             echo "::error::A lesson fell back to synthetic data on the build runner (a real dataset fetch failed -- most likely a heavy dependency missing from this workflow's pip install, e.g. wfdb or scanpy). The site was NOT published; fix the install and re-run."
             exit 1
           fi
-          echo "Data-fallback guard passed: every lesson dataset fetched real."
+          # Also fail if any lesson rendered an execution error/traceback (a cell
+          # that errored or timed out during the build). A crash is NOT a fallback,
+          # so the pattern above misses it -- this is exactly what broke wk1.
+          if grep -rInoE 'Traceback \(most recent call last\)|CellExecutionError|CellTimeoutError' book/_build/html/lessons/; then
+            echo "::error::A lesson rendered an execution error/traceback (a cell failed or timed out during the build). The site was NOT published; fix the failing cell."
+            exit 1
+          fi
+          echo "Lesson guard passed: every dataset fetched real and no cell errored."
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
