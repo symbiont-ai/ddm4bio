@@ -233,64 +233,96 @@ raise the SNR of a signal whose noise we controlled has no claim on a real
 recording, where the clean truth is unavailable and the gain can only be
 inferred.
 
-## 3. Biomedical framing: denoising a synthetic ECG
+## 3. Biomedical application: a real ECG from MIT-BIH
 
-With the denoiser validated on a controlled signal, we point it at a more
-realistic target: an electrocardiogram-style trace. This course ships no bundled
-biomedical *time series* that loads fully offline (the MIT-BIH loader in
-`ddm4bio.datasets.physio` is a network-backed stub), so we synthesize a
-physiological-shaped signal -- sharp QRS spikes on a slow respiratory baseline --
-rather than download one. The point of this section is not another validated
-metric but to see the method behave on a waveform with the spiky, non-stationary
-morphology that makes real biosignals hard: the sharp R-peaks are exactly the
-kind of transient a naive low-pass filter would smear but a wavelet basis
-preserves.
+The validation sections above ran on fixtures we authored. We now point the same
+two tools -- the STFT and the wavelet denoiser -- at a *real* recording drawn
+through the course data layer. `get_dataset("mitbih")` fetches one channel of
+the MIT-BIH Arrhythmia Database from PhysioNet and caches it; when the network
+or the optional `wfdb` dependency is unavailable it returns a labeled,
+deterministic ECG-like *fallback* with the identical payload shape, so this
+section runs the same way online or offline. We print the provenance so the
+reader always knows which one they got.
 
 ```{code-cell} ipython3
-def synthetic_ecg(t, heart_rate_hz=1.2):
-    """A crude ECG surrogate: QRS complexes on a respiratory baseline."""
-    beats = np.arange(0.0, t[-1], 1.0 / heart_rate_hz)
-    s = np.zeros_like(t)
-    for b in beats:
-        s += 1.00 * np.exp(-((t - b) / 0.010) ** 2)          # R peak
-        s += -0.15 * np.exp(-((t - b + 0.03) / 0.015) ** 2)  # Q dip
-        s += -0.25 * np.exp(-((t - b - 0.03) / 0.020) ** 2)  # S dip
-        s += 0.20 * np.exp(-((t - b - 0.16) / 0.050) ** 2)   # T wave
-    s += 0.05 * np.sin(2 * np.pi * 0.25 * t)                 # respiration drift
-    return s
+from ddm4bio.datasets import get_dataset
 
-ecg_clean = synthetic_ecg(t_d)
-ecg_power = float(np.mean(ecg_clean**2))
-ecg_sigma = np.sqrt(ecg_power / 10 ** (3.0 / 10))  # target ~3 dB input
+ds = get_dataset("mitbih")  # tries PhysioNet + wfdb, caches; falls back offline
+print(f"data source: {ds.source}")
+print(f"provenance:  {ds.provenance}")
+
+signal = np.asarray(ds.payload["signal"], dtype=float)  # n_samples x n_channels
+fs_ecg = float(ds.payload["fs"])
+sig_names = ds.payload["sig_names"]
+
+# One channel, a manageable ~10-second window.
+channel = 0
+win_n = int(round(10.0 * fs_ecg))
+ecg = signal[:win_n, channel]
+t_ecg = np.arange(ecg.size) / fs_ecg
+print(f"channel {channel} ({sig_names[channel]}): {ecg.size} samples "
+      f"= {ecg.size / fs_ecg:.1f} s at {fs_ecg:.0f} Hz")
+```
+
+First the time-frequency view. An ECG is aggressively non-stationary -- each QRS
+complex is a brief broadband transient punctuating a quieter baseline -- so its
+spectrogram shows vertical stripes of power at the beat instants rather than a
+single steady ridge. This is the same STFT machinery validated on the chirp,
+now with no ground-truth sweep to overlay: the value is the qualitative picture
+of *when* the spectral energy arrives.
+
+```{code-cell} ipython3
+from ddm4bio.viz.plots import time_freq_panel
+
+f_ecg, t_frames, ecg_power = stft(ecg, fs=fs_ecg, nperseg=256)
+ax = time_freq_panel(t_frames, f_ecg, np.abs(ecg_power) ** 2)
+ax.set_ylim(0, 40)
+ax.set_title(f"MIT-BIH ECG spectrogram ({ds.source} data)")
+ax.figure  # end the cell with the Figure so it renders in the notebook output
+```
+
+Now wavelet denoising. A real recording gives us no separately-known clean
+version, so -- to keep a *measurable* SNR gain rather than an eyeballed one -- we
+treat the loaded ECG window itself as the reference and add white Gaussian noise
+calibrated to a target input SNR. The gain we report is therefore how much of
+that *known, added* noise the wavelet threshold removes; the recording's own
+intrinsic noise is folded into the reference and not counted.
+
+```{code-cell} ipython3
+target_snr_db_ecg = 5.0
+ecg_power_mean = float(np.mean(ecg**2))
+ecg_sigma = np.sqrt(ecg_power_mean / 10 ** (target_snr_db_ecg / 10))
 
 rng_ecg = np.random.default_rng(11)
-ecg_noisy = ecg_clean + ecg_sigma * rng_ecg.standard_normal(ecg_clean.shape)
+ecg_noisy = ecg + ecg_sigma * rng_ecg.standard_normal(ecg.shape)
 ecg_denoised = wavelet_denoise(ecg_noisy, wavelet="sym4", mode="soft")
 
-ecg_snr_in = qc_signals(ecg_noisy, fs=fs_d, reference=ecg_clean).summary["snr_db"]
-ecg_snr_out = qc_signals(ecg_denoised, fs=fs_d, reference=ecg_clean).summary["snr_db"]
-print(f"ECG surrogate: input {ecg_snr_in:.2f} dB -> output {ecg_snr_out:.2f} dB "
+ecg_snr_in = qc_signals(ecg_noisy, fs=fs_ecg, reference=ecg).summary["snr_db"]
+ecg_snr_out = qc_signals(ecg_denoised, fs=fs_ecg, reference=ecg).summary["snr_db"]
+print(f"Real-ECG denoising: input {ecg_snr_in:.2f} dB -> output {ecg_snr_out:.2f} dB "
       f"({ecg_snr_out - ecg_snr_in:+.2f} dB)")
 ```
 
 ```{code-cell} ipython3
 fig, axes = plt.subplots(2, 1, figsize=(10, 4.2), sharex=True)
-win = slice(0, int(2.5 * fs_d))
-axes[0].plot(t_d[win], ecg_noisy[win], linewidth=0.8)
+win = slice(0, int(2.5 * fs_ecg))
+axes[0].plot(t_ecg[win], ecg_noisy[win], linewidth=0.8)
 axes[0].set_ylabel("noisy ECG")
-axes[1].plot(t_d[win], ecg_denoised[win], linewidth=1.0)
-axes[1].plot(t_d[win], ecg_clean[win], linewidth=0.8, linestyle="--", alpha=0.7)
+axes[1].plot(t_ecg[win], ecg_denoised[win], linewidth=1.0)
+axes[1].plot(t_ecg[win], ecg[win], linewidth=0.8, linestyle="--", alpha=0.7)
 axes[1].set_ylabel("denoised")
 axes[1].set_xlabel("Time (s)")
-fig.suptitle("Wavelet denoising preserves QRS spikes on a synthetic ECG")
+fig.suptitle("Wavelet denoising of a real MIT-BIH ECG window")
 fig
 ```
 
 The recovered trace keeps the R-peaks crisp while suppressing the broadband
-noise between beats. Because this is a *synthetic* ECG we still hold the clean
-truth, so the SNR gain here is genuine -- but on a truly unlabeled clinical
-recording that number would be unavailable, and the honest report would fall
-back to reference-free proxies plus expert inspection.
+noise between beats -- exactly the transient-sparing behavior the wavelet basis
+buys us over a naive low-pass filter. But note the honesty ceiling: our
+"reference" is the raw recording, which itself carries intrinsic noise, so the
+SNR gain measures only the removal of the noise we injected. On a truly
+unlabeled clinical recording no such number exists, and the honest report would
+fall back to reference-free proxies plus expert inspection.
 
 ## 4. Compressed sensing: ground truth first
 

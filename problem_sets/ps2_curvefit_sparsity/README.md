@@ -24,12 +24,18 @@ No downloads, no network, no credentials.
 - **Dose-response assay** — generated locally by `simulate_dose_response`, which
   evaluates a known Hill curve (`ddm4bio.methods.fitting.hill`) and adds
   independent Gaussian replicate noise. Because the true EC50 and Hill
-  coefficient are known, you can measure how well you recovered them.
+  coefficient are known, you can measure how well you recovered them. (This stays
+  synthetic on purpose: it is the ground-truth recovery check.)
 - **Differentiation signal** — a noisy sine on a uniform grid, whose analytic
   derivative (a cosine) is known exactly.
-- **Biomarker panel** — `sklearn.datasets.load_breast_cancer` (569 samples, 30
-  features, bundled with scikit-learn), wrapped as a labelled DataFrame by
-  `load_breast_cancer_frame` so the tabular QC report can check class balance.
+- **Biomarker panel** — the Breast Cancer Wisconsin (Diagnostic) dataset (569
+  samples, 30 features), loaded through the course data layer as
+  `get_dataset("breast_wisconsin", download=False)` and wrapped as a labelled
+  DataFrame by `load_breast_cancer_frame` so the tabular QC report can check
+  class balance. With `download=False` this serves the scikit-learn *bundled*
+  WDBC data deterministically and offline (a synthetic fallback is used only if
+  scikit-learn is missing). The related Week 2 lesson also fits a Hill curve to a
+  real drug/cell dose-response series from `get_dataset("gdsc")`.
 
 All randomness is seeded from `ddm4bio.config.GLOBAL_SEED`; identical inputs must
 give identical outputs.

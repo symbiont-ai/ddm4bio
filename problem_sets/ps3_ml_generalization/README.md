@@ -25,10 +25,17 @@ No downloads, no network, no credentials.
   `true_function(x) = sin(1.5·x) + 0.3·x`, sampled with additive Gaussian noise
   by `generate_synthetic_curve(...)`. Both are already implemented for you so the
   ground truth is fixed and shared across the two models.
-- **Parts B–C** use scikit-learn's bundled `load_breast_cancer` dataset (569
-  samples, 30 numeric features, a binary malignant/benign target). It ships
-  inside scikit-learn, so it loads offline. The loader `load_clinical_data()`
-  is provided.
+- **Parts B–C** pull a real biomedical cohort through the course dataset layer:
+  `get_dataset("heart_uci", download=False)` (the UCI Heart Disease processed
+  Cleveland cohort — 303 patients, 13 clinical features, a binary
+  disease-present target). With `download=False` the loader stays offline and
+  deterministic, returning a labeled synthetic fallback with the **same payload
+  shape** (`ds.payload["X"]` a 303×13 table, `ds.payload["y"]` a binary label);
+  passing `download=True` fetches and caches the real CSV instead. The provided
+  `main()` prints `ds.source`/`ds.provenance` so you always see which you got.
+- The autograder in `tests/` validates the evaluation machinery against the
+  bundled, well-separated `load_breast_cancer` fixture (569 samples, 30
+  features), which also loads offline; `load_clinical_data()` is provided for it.
 
 Everything is seeded with `GLOBAL_SEED = 20260714`; call
 `ddm4bio.seed_everything()` before any stochastic step (the provided `main()`
@@ -62,8 +69,10 @@ the course library:
 
 ## Part B — Application: predict a clinical outcome
 
-On `load_breast_cancer`, build three classifiers in `build_models(seed)`, each a
-pipeline that standardizes the features first:
+On the `get_dataset("heart_uci")` cohort, build three classifiers in
+`build_models(seed)`, each a pipeline that imputes missing values (a
+`SimpleImputer` first step — the real table has a few gaps) and standardizes the
+features:
 
 - `"linear"` — a nearly **unregularized** logistic regression (very large `C`).
 - `"nn"` — a **shallow** neural network (`MLPClassifier`, one small hidden layer).

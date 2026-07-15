@@ -20,14 +20,24 @@ on both correctness and honesty.
 
 ## Data
 
-Everything is offline and deterministic — no downloads, no network.
+The ground-truth fixtures are synthetic, offline, and deterministic. The
+real-data PCA application streams a single-cell matrix through the course data
+layer, which caches the genuine download and falls back to a structurally
+identical synthetic matrix when offline — so this too runs with no network.
 
 - **Synthetic expression matrix** — `make_expression_matrix()` (provided in the
   template) builds an `(n_samples, n_genes)` matrix with two orthogonal gene
   programs injected on top of Gaussian noise: a strong *biological* program tied
   to a binary condition label, and a weaker *batch* program tied to a nuisance
   label. Because you know the true directions and labels, you can measure
-  exactly how well PCA recovers them.
+  exactly how well PCA recovers them. This is the PCA **validation** fixture.
+- **Real single-cell matrix** — `get_dataset("pbmc3k")`
+  (`ddm4bio.datasets.get_dataset`) returns the 10x Genomics PBMC3k assay as an
+  `AnnData` (real; use `.X` for the counts) or a labelled fallback `dict` with
+  `counts`/`labels`/`gene_names` (offline). `load_single_cell_expression()`
+  (provided) log1p-normalizes it and selects the top-variance genes; the
+  application applies the same validated PCA to it and prints `ds.source` /
+  `ds.provenance` so you can see whether you got real or fallback data.
 - **Synthetic mixed sources** — `ddm4bio.datasets.synthetic.make_mixed_sources`
   returns a `MixedSources` fixture: known independent sources (sine, sawtooth,
   square, then Laplacian sources), a known mixing matrix, and the observed

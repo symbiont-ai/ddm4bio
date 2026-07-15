@@ -26,3 +26,6 @@ data/raw/*
 data/cache/*
 !data/raw/.gitkeep
 !data/cache/.gitkeep
+
+# defensive: dataset cache must never be committed, wherever CWD resolves it
+**/data/cache/

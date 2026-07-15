@@ -23,21 +23,28 @@ signatures must not change; the autograder imports them directly.
 
 ## Data (everything offline)
 
-No downloads, no network, no credentials. All fixtures come from the course
-library and are deterministic under `GLOBAL_SEED`:
+No downloads, no network, no credentials. All fixtures are deterministic under
+`GLOBAL_SEED`, and the one real-data fixture is loaded through the course data
+layer with `download=False` so it resolves to a labeled, deterministic fallback
+offline:
 
 - **Nonstationary signal** — `load_nonstationary_signal()` builds a linear
   chirp (10 → 80 Hz) plus two time-gated tone bursts. Its spectral content
   changes over time, which is exactly what makes an STFT/wavelet view more
   informative than a single FFT.
-- **ECG-like segment** — `load_ecg_segment()` returns a clean synthetic beat
-  train (Gaussian Q/R/T deflections plus slow baseline wander) *and* a noisy
-  copy with additive Gaussian noise of known standard deviation. Because the
-  clean reference is known, the denoising SNR gain is measurable.
+- **ECG segment (real data)** — `load_ecg_segment()` pulls one channel of the
+  MIT-BIH Arrhythmia Database via `get_dataset("mitbih", download=False)`. That
+  call returns the real PhysioNet ECG when `wfdb` and the record are available
+  and otherwise a labeled synthetic ECG-like fallback (fs = 360 Hz) with the
+  same payload shape, so the problem set stays offline and deterministic. The
+  first few seconds of the loaded recording are treated as the *clean
+  reference*, and additive Gaussian noise of known standard deviation is layered
+  on top, so the denoising SNR gain is measured against a fixed reference.
 - **Sparse 1-D field** — `load_sparse_field()` wraps
   `ddm4bio.datasets.synthetic.make_sparse_signal` to produce a k-sparse field
   (a handful of isolated point sources on an empty grid), our stand-in for a
-  spatially sparse MRI slice.
+  spatially sparse MRI slice. This is a ground-truth fixture with known support,
+  so it stays synthetic.
 
 You use the library wrappers in `ddm4bio.methods.signals`
 (`stft`, `wavelet_denoise`, `compressed_sensing_recon`), the ground-truth

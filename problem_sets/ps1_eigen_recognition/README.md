@@ -9,8 +9,8 @@ This problem set has two threads that meet in the same idea. First you will
 solve a linear system `A x = b` two different ways and watch how the *method*
 you choose changes the cost and the numerical behaviour. Then you will use the
 singular value decomposition to build an "eigen-image" basis — the same machine
-behind eigenfaces — and turn it into a working recognizer for handwritten
-digits, which we treat here as a stand-in for cheap, offline "eigen-cells."
+behind eigenfaces — and turn it into a working recognizer for real
+peripheral-blood-cell microscopy crops (BloodMNIST): our literal "eigen-cells."
 
 Everything is small, deterministic, and runs offline. Fill in the method logic
 in `student/ps1.py`; the imports, data loading, and quality-control plumbing are
@@ -19,16 +19,21 @@ numerical thresholds.
 
 ## Data
 
-No downloads, no network. Two offline sources:
+Two sources, both offline-safe:
 
 - **Synthetic SPD system** — `make_spd_system(n)` (provided) builds a symmetric
   positive-definite matrix `A = M Mᵀ + n·I` and a right-hand side `b`. Symmetry
   and positive-definiteness are what let conjugate gradient apply.
-- **`sklearn.datasets.load_digits`** — the bundled 8×8 handwritten-digit images
-  (1797 samples, 64 pixel-features, 10 classes) shipped inside scikit-learn.
-  `load_digits_split()` (provided) returns a deterministic, stratified
-  train/test split. We use it as a small, honest proxy for an imaging-based
-  cell-recognition task: low-resolution grayscale images with known labels.
+- **BloodMNIST via `get_dataset("bloodmnist")`** — real peripheral-blood-cell
+  microscopy crops (MedMNIST v2, CC BY 4.0). `load_digits_split()` (provided)
+  pulls the library through the course data layer, converts each crop to
+  grayscale (mean over the colour axis), flattens it, and returns a
+  deterministic, stratified train/test split. When the download is unavailable
+  it transparently falls back to a bundled image stack with the *same payload
+  shape*, so the problem set and its autograder run offline and deterministically
+  (`get_dataset("bloodmnist", download=False)`). We use it as an honest
+  imaging-based cell-recognition task: low-resolution grayscale images with
+  known cell-type labels.
 
 Seed everything through `ddm4bio.seed_everything()` (already called in `main`).
 
@@ -51,7 +56,7 @@ Seed everything through `ddm4bio.seed_everything()` (already called in `main`).
    must be orthonormal, and projection followed by reconstruction with a
    full-rank basis must return the original data.
 
-## Part B — Application: eigen-cells on digits
+## Part B — Application: eigen-cells on blood-cell images
 
 1. Implement `reconstruction_error_curve`: fit the eigen-basis on the **training**
    split only, then measure the relative-L2 reconstruction error on the
@@ -78,7 +83,7 @@ the pieces it needs:
   index sets. Explain in a comment why fitting the basis on training data only
   (and never on the test split) is the leakage-safe choice.
 - **Class balance.** `run_qc` prints a `ddm4bio.qc` tabular report of the label
-  distribution. Note whether the ten digit classes are roughly balanced and what
+  distribution. Note whether the cell-type classes are roughly balanced and what
   that means for interpreting accuracy.
 
 ## Part D — Interpretation & confidence
@@ -87,7 +92,7 @@ Implement `modes_for_variance` to report the smallest number of modes reaching
 90%, 95%, and 99% of the cumulative variance (using
 `ddm4bio.methods.decomposition.explained_variance_ratio`). Then, in the
 interpretation block printed by `main` (via
-`ddm4bio.interpret.interpretation_block`), state: how aggressively the digits
+`ddm4bio.interpret.interpretation_block`), state: how aggressively the images
 compress, how trustworthy the nearest-neighbour classifier is given the QC
 evidence, and the honest limitations of reading these results as a claim about
 real cell imaging. Pick a confidence level and back it with the evidence you

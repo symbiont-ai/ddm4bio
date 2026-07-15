@@ -49,20 +49,31 @@ def make_spd_system(n: int, seed: int = GLOBAL_SEED) -> tuple[np.ndarray, np.nda
 
 
 def load_digits_split(
-    test_size: float = 0.3, seed: int = GLOBAL_SEED
+    test_size: float = 0.3, seed: int = GLOBAL_SEED, download: bool = False
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Load and split the bundled ``load_digits`` dataset (offline).
+    """Load the BloodMNIST image library via ``get_dataset`` and split it.
 
-    Returns ``(X_train, X_test, y_train, y_test)`` with 64-feature rows and a
-    stratified, deterministic split.
+    The application data flows through the course data layer:
+    ``get_dataset("bloodmnist")`` returns real MedMNIST blood-cell crops when a
+    download is available and a deterministic bundled fallback (same payload
+    shape) otherwise. Every crop is converted to grayscale (mean over the colour
+    axis) and flattened. Defaults to ``download=False`` so the run stays offline
+    and deterministic. The historical name is kept for autograder compatibility.
+
+    Returns ``(X_train, X_test, y_train, y_test)`` with grayscale ``H*W``-feature
+    rows and a stratified, deterministic split.
     """
-    from sklearn.datasets import load_digits
     from sklearn.model_selection import train_test_split
 
-    data = load_digits()
-    x, y = data.data.astype(float), data.target
+    from ddm4bio.datasets import get_dataset
+
+    ds = get_dataset("bloodmnist", download=download, seed=seed)
+    images = ds.payload["train_images"]  # (N, H, W, C) uint8
+    labels = ds.payload["train_labels"].ravel()
+
+    x = images.mean(axis=-1).reshape(images.shape[0], -1).astype(float)
     x_train, x_test, y_train, y_test = train_test_split(
-        x, y, test_size=test_size, random_state=seed, stratify=y
+        x, labels, test_size=test_size, random_state=seed, stratify=labels
     )
     return x_train, x_test, y_train, y_test
 
@@ -295,22 +306,32 @@ def main() -> None:
     for key, value in solver_stats.items():
         print(f"  {key}: {value}")
 
-    # Data for Parts B-D.
+    # Data for Parts B-D, via the course data layer. Provenance is printed so the
+    # reader sees whether the run used real BloodMNIST or the bundled fallback.
+    from ddm4bio.datasets import get_dataset
+
+    provenance = get_dataset("bloodmnist", download=False, seed=GLOBAL_SEED)
+    print(f"\nApplication data: BloodMNIST via get_dataset -> source={provenance.source}")
+    print(f"  {provenance.provenance}")
+
     x_train, x_test, y_train, y_test = load_digits_split()
+    n_classes = int(np.unique(y_train).size)
+    n_features = x_train.shape[1]
+    chance = 1.0 / n_classes
     train_idx = np.arange(x_train.shape[0])
     test_idx = np.arange(x_train.shape[0], x_train.shape[0] + x_test.shape[0])
 
     print("\n== Part C: quality control (before results) ==")
     run_qc(x_train, x_test, y_train, y_test, train_idx, test_idx)
 
-    print("\n== Part B: eigen-cells on digits ==")
+    print("\n== Part B: eigen-cells on blood-cell images ==")
     mode_list = [1, 2, 5, 10, 20, 30, 40, 64]
     curve = reconstruction_error_curve(x_train, x_test, mode_list)
     for k, err in zip(mode_list, curve):
         print(f"  modes={k:>3d}  test rel-L2 error={err:.4f}")
 
     acc = eigen_nn_accuracy(x_train, y_train, x_test, y_test, n_modes=25)
-    print(f"  1-NN accuracy in 25-mode eigen-basis = {acc:.4f} (chance = 0.10)")
+    print(f"  1-NN accuracy in 25-mode eigen-basis = {acc:.4f} (chance = {chance:.2f})")
 
     var_modes = modes_for_variance(x_train, [0.90, 0.95, 0.99])
     print("\n== Part D: variance thresholds ==")
@@ -320,14 +341,16 @@ def main() -> None:
     print("\n== Part D: interpretation ==")
     block = interpretation_block(
         claim=(
-            f"An eigen-image basis compresses the 64-pixel digits to "
-            f"{var_modes[0.95]} modes at 95% variance, and a 1-nearest-neighbour "
-            f"classifier in a 25-mode basis reaches {acc:.2f} accuracy -- far "
-            "above the 0.10 random-guess baseline."
+            f"An eigen-image basis compresses the {n_features}-pixel blood-cell "
+            f"images to {var_modes[0.95]} modes at 95% variance, and a "
+            f"1-nearest-neighbour classifier in a 25-mode basis reaches {acc:.2f} "
+            f"accuracy -- above the {chance:.2f} random-guess baseline."
         ),
         confidence="high",
         limitations_list=[
-            "load_digits is 8x8, clean, and centered; real microscopy is noisier.",
+            "Grayscale + a subsample discards colour/staining cues real blood-cell "
+            "typing relies on; offline the run uses the bundled fallback, not the "
+            "real crops.",
             "1-NN accuracy is a single held-out estimate, not cross-validated.",
             "The eigen-basis is linear and cannot capture nonlinear structure.",
         ],

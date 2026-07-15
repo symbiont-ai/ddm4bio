@@ -66,24 +66,30 @@ def load_ecg_segment(
     noise: float = 0.35,
     seed: int = GLOBAL_SEED,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
-    """Build a synthetic ECG-like segment with a known clean reference (provided).
+    """Load a real MIT-BIH ECG window as a clean reference and add noise (provided).
+
+    Uses ``get_dataset("mitbih", download=False)`` so the fixture is fully
+    offline and deterministic (a labeled synthetic ECG-like fallback at
+    fs = 360 Hz is returned when the real PhysioNet record / ``wfdb`` is
+    unavailable, with the same payload shape). The first ``duration`` seconds of
+    channel 0 are the clean reference; zero-mean Gaussian noise of known standard
+    deviation is added to build the noisy copy.
 
     Returns
     -------
     tuple
         ``(t, clean, noisy, fs)``.
     """
+    from ddm4bio.datasets import get_dataset
+
+    ds = get_dataset("mitbih", download=False, seed=seed)
+    fs = float(ds.payload["fs"])
+    signal = np.asarray(ds.payload["signal"], dtype=float)
     n = int(round(fs * duration))
-    t = np.arange(n) / fs
-    hr = 1.2  # beats per second
-    clean = np.zeros(n)
-    for beat in np.arange(0.0, duration, 1.0 / hr):
-        clean += 1.0 * np.exp(-0.5 * ((t - beat) / 0.012) ** 2)
-        clean -= 0.15 * np.exp(-0.5 * ((t - beat + 0.03) / 0.015) ** 2)
-        clean += 0.25 * np.exp(-0.5 * ((t - beat - 0.16) / 0.04) ** 2)
-    clean += 0.05 * np.sin(2.0 * np.pi * 0.3 * t)  # baseline wander
+    clean = signal[:n, 0]
+    t = np.arange(clean.size) / fs
     rng = np.random.default_rng(seed)
-    noisy = clean + noise * rng.standard_normal(n)
+    noisy = clean + noise * rng.standard_normal(clean.size)
     return t, clean, noisy, fs
 
 

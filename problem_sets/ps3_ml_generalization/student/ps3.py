@@ -6,10 +6,12 @@ return keys, and performance thresholds.
 
 What is already wired for you (do not rewrite):
 * :func:`true_function` and :func:`generate_synthetic_curve` -- the Part A data.
-* :func:`load_clinical_data` -- the offline breast-cancer loader (Part B).
+* :func:`load_clinical_data` -- the bundled breast-cancer fixture the autograder
+  scores against.
 * :func:`run_tabular_qc` -- the quality-control call (Part C).
-* :func:`main` -- the end-to-end orchestration that calls your functions in
-  order and prints the interpretation block.
+* :func:`main` -- the end-to-end orchestration; it loads the real Part B/C cohort
+  via ``get_dataset("heart_uci")``, calls your functions in order, and prints the
+  interpretation block.
 
 What you implement: the model-fitting and evaluation logic (Parts A/B/C).
 
@@ -28,6 +30,7 @@ from typing import Any
 import numpy as np
 
 from ddm4bio import seed_everything
+from ddm4bio.datasets import get_dataset
 from ddm4bio.interpret import interpretation_block
 from ddm4bio.methods.learning import (  # noqa: F401  (used by the functions you implement)
     cross_validate,
@@ -207,7 +210,10 @@ def load_clinical_data() -> tuple[np.ndarray, np.ndarray, list[str]]:
 def build_models(seed: int | None = None) -> dict[str, Any]:
     """Construct the three classifiers compared in Part B.
 
-    Each should be a pipeline that standardizes features first, then applies:
+    Each should be a pipeline that *imputes* missing values and standardizes
+    features first (the real clinical table carries a few missing entries; a
+    ``SimpleImputer`` as the first step keeps the pipeline leakage-safe and is a
+    no-op when nothing is missing), then applies:
     * ``"linear"``      -- a nearly *unregularized* logistic regression
       (use a very large ``C``);
     * ``"nn"``          -- a shallow ``MLPClassifier`` (one small hidden layer,
@@ -222,8 +228,9 @@ def build_models(seed: int | None = None) -> dict[str, Any]:
     dict
         Keys ``"linear"``, ``"nn"``, ``"regularized"``.
     """
-    # TODO: build the three StandardScaler-prefixed pipelines described above and
-    # return them in a dict with exactly these three keys.
+    # TODO: build the three pipelines described above, each led by a
+    # SimpleImputer(strategy="median") then a StandardScaler, and return them in
+    # a dict with exactly these three keys.
     raise NotImplementedError
 
 
@@ -381,15 +388,25 @@ def main() -> None:
         f"extrap MSE={nn_err['extrap_mse']:.4f}"
     )
 
-    # ----- Part B: clinical application ----- #
-    X, y, feature_names = load_clinical_data()
+    # ----- Part B: clinical application (real biomedical data via get_dataset) ----- #
+    # download=False keeps the run offline and deterministic: get_dataset returns
+    # the labeled synthetic fallback with the same (X, y) payload shape as the
+    # real UCI Heart Disease cohort. Set download=True to fetch and cache the
+    # real Cleveland CSV instead; your functions below work the same either way.
+    ds = get_dataset("heart_uci", download=False)
+    print("== Data provenance ==")
+    print(f"source:     {ds.source}")
+    print(f"provenance: {ds.provenance}")
+    X = ds.payload["X"].to_numpy(dtype=float)  # (303, 13); real data may hold NaNs
+    y = ds.payload["y"].to_numpy()
+    feature_names = list(ds.payload["X"].columns)
 
     print("\n== Quality control (run BEFORE modeling) ==")
     report = run_tabular_qc(X, y, feature_names)
     print(report.render())
 
     models = build_models(seed=SEED)
-    print("\n== Part B: cross-validated ROC-AUC on breast cancer ==")
+    print("\n== Part B: cross-validated ROC-AUC on heart disease ==")
     for name, est in models.items():
         cv_res = kfold_cv(est, X, y, cv=5, scoring="roc_auc", seed=SEED)
         print(f"{name:>12}: AUC = {cv_res['mean']:.3f} +/- {cv_res['std']:.3f}")

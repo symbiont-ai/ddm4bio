@@ -327,18 +327,19 @@ def main() -> None:
     spiral_scores = term_recovery(LINEAR_SPIRAL_TERMS, sindy_result)
     print("\n=== Part A: SINDy ===")
     print("recovered terms :", sorted(sindy_result.active_terms))
-    print("precision/recall:", round(spiral_scores["precision"], 3),
-          "/", round(spiral_scores["recall"], 3))
+    print(
+        "precision/recall:",
+        round(spiral_scores["precision"], 3),
+        "/",
+        round(spiral_scores["recall"], 3),
+    )
 
     # --- Part C: QC BEFORE real data (noise sensitivity) ---------------------
     noise_levels = [0.0, 1e-3, 1e-2, 5e-2, 1e-1, 2e-1]
     sweep = sindy_noise_sensitivity(noise_levels, seed=SEED, threshold=0.1)
     print("\n=== Part C: SINDy noise sensitivity (ground truth) ===")
     for record in sweep:
-        print(
-            f"noise={record['noise']:<6} "
-            f"P={record['precision']:.2f} R={record['recall']:.2f}"
-        )
+        print(f"noise={record['noise']:<6} P={record['precision']:.2f} R={record['recall']:.2f}")
 
     # --- Part C: held-out DMD forecast ---------------------------------------
     forecast_out = dmd_forecast(snapshots, n_train=150)
@@ -351,8 +352,12 @@ def main() -> None:
     epi = fit_epidemic_dynamics(sir, threshold=0.05)
     print("\n=== Part B: SIR governing equations (SINDy) ===")
     print("recovered terms :", sorted(epi["result"].active_terms))
-    print("precision/recall:", round(epi["scores"]["precision"], 3),
-          "/", round(epi["scores"]["recall"], 3))
+    print(
+        "precision/recall:",
+        round(epi["scores"]["precision"], 3),
+        "/",
+        round(epi["scores"]["recall"], 3),
+    )
 
     # --- Part B: filter a noisy physiological signal -------------------------
     fhn = make_fitzhugh_nagumo(t_max=200.0, n_steps=2000)

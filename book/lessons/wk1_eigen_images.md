@@ -21,9 +21,10 @@ humble linear system -- solved two different ways, with a hard look at when the
 answer can be trusted -- and then move to the **eigen-image** idea: represent a
 whole library of images in a compact basis of a few "prototype" pictures
 discovered by principal component analysis. The famous version of this is
-*eigenfaces*; here, working entirely with scikit-learn's bundled handwritten
-digits, we build **eigen-cells** -- eigen-images of small biomedical-style
-image patches -- and use them to compress, reconstruct, and classify.
+*eigenfaces*; here, working with **real** peripheral-blood-cell microscopy
+crops (BloodMNIST, pulled through the course data layer), we build
+**eigen-cells** -- eigen-images of small biomedical image patches -- and use
+them to compress, reconstruct, and classify.
 
 The recurring discipline of the course appears already in Week 1: we never trust
 a number we have not checked. Every step here is quantified -- the conditioning
@@ -35,7 +36,7 @@ fitting.
 **Reading.** Kutz, *Data-Driven Modeling & Scientific Computation*, 2nd ed.,
 Chapter 2 (linear systems, least squares, the SVD, and the eigenface
 recognition pipeline). Read it for the derivations; the treatment below is in
-our own terms and runs against our own fixtures and the bundled digits.
+our own terms and runs against our own fixtures and the BloodMNIST library.
 
 **Learning goals.**
 
@@ -147,25 +148,46 @@ magnitude larger -- solving a system built on it would mean surrendering most of
 your significant digits to round-off. The lesson for the rest of the course:
 before trusting any solve, check the condition number.
 
-## 2. From pixels to an image library: the digits as "cells"
+## 2. From pixels to an image library: blood cells as "cells"
 
-We now switch from a single linear system to a *library* of images. scikit-learn
-ships a bundled dataset of 1{,}797 handwritten digits, each an $8\times 8$
-grayscale image (64 pixels). We treat these as stand-ins for small biomedical
-image patches -- imagine a library of segmented cell crops from a microscopy
-screen, each to be recognized by type. The eigen-image pipeline is identical
-whatever the pictures depict; the digits simply give us a clean, offline,
-ground-truthed library to learn on.
+We now switch from a single linear system to a *library* of images. Here the
+library is **real**: we pull BloodMNIST -- peripheral-blood-cell microscopy
+crops from MedMNIST v2 -- through the course data layer,
+`get_dataset("bloodmnist")`. Each crop is a small RGB image carrying an integer
+cell-type label. We convert every crop to grayscale (averaging the colour
+channels), flatten it to a vector, and take a *seeded* few-hundred-image
+subsample so the whole lesson runs briskly. These are our literal "eigen-cells."
+The loader returns real data when it can reach the source and a labelled bundled
+fallback with the *same payload shape* otherwise, so the pipeline below runs
+identically either way -- and we print which one we got.
 
 ```{code-cell} ipython3
-from sklearn.datasets import load_digits
+from ddm4bio.datasets import get_dataset
 
-digits = load_digits()
-images = digits.images          # (1797, 8, 8) raw pixel grids
-X = digits.data                 # (1797, 64) flattened, samples in rows
-y = digits.target               # (1797,) class label 0-9
+# Download allowed; the loader falls back to a bundled stack (same shape) offline.
+ds = get_dataset("bloodmnist", seed=0)
+print(f"Data source : {ds.source}")
+print(f"Provenance  : {ds.provenance}")
 
-print(f"Image library: {images.shape[0]} images of {images.shape[1]}x{images.shape[2]} pixels")
+# Real BloodMNIST train images are (N, 28, 28, 3) uint8; the offline fallback is
+# (N, 8, 8, 1). Averaging over the trailing colour axis gives grayscale in both
+# cases, so the analysis never has to know which source it got.
+train_images = ds.payload["train_images"]           # (N, H, W, C) uint8
+train_labels = ds.payload["train_labels"].ravel()   # (N,) integer cell type
+
+rng_sub = np.random.default_rng(0)
+n_sub = min(400, train_images.shape[0])
+subsample = rng_sub.choice(train_images.shape[0], size=n_sub, replace=False)
+
+images = train_images[subsample].mean(axis=-1)      # (n_sub, H, W) grayscale
+img_h, img_w = images.shape[1], images.shape[2]
+X = images.reshape(n_sub, -1).astype(float)         # (n_sub, H*W), samples in rows
+y = train_labels[subsample]
+classes = np.unique(y)
+n_classes = classes.size
+
+print(f"Image library: {images.shape[0]} images of {img_h}x{img_w} pixels "
+      f"({n_classes} cell classes)")
 print(f"Flattened feature matrix X: {X.shape} (samples x pixels)")
 print(f"Pixel intensity range: [{X.min():.0f}, {X.max():.0f}]")
 ```
@@ -182,7 +204,7 @@ for ax, img, label in zip(axes.flat, images, y):
     ax.set_title(f"class {label}", fontsize=8)
     ax.set_xticks([])
     ax.set_yticks([])
-fig.suptitle("Twelve images from the 8x8 digit library (our 'cells')")
+fig.suptitle(f"Twelve crops from the {img_h}x{img_w} blood-cell library (our 'cells')")
 fig
 ```
 
@@ -224,7 +246,7 @@ print(f"Variance captured by top 10 modes : {evr[:10].sum():.1%}")
 The scree curve shows how fast the explained variance decays. Unlike the sharp
 rank-2 elbow of a purely synthetic fixture, real image data has a *gentle*
 shoulder: a handful of modes dominate, but a long tail of small modes carries
-the fine detail that distinguishes similar digits.
+the fine detail that distinguishes similar cell types.
 
 ```{code-cell} ipython3
 from ddm4bio.viz.plots import scree_plot
@@ -245,9 +267,9 @@ from ddm4bio.viz.plots import mode_grid
 # Recover the eigen-images (principal axes) as rows via the economy SVD of the
 # centered data -- the same Vt that pca_reduce projects onto.
 _, _, vt = np.linalg.svd(X_centered, full_matrices=False)
-eigen_images = vt[:8]           # top 8 eigen-images, each length-64
+eigen_images = vt[:8]           # top 8 eigen-images, each length H*W
 
-fig = mode_grid(eigen_images, shape=(8, 8), ncols=4)
+fig = mode_grid(eigen_images, shape=(img_h, img_w), ncols=4)
 fig.suptitle("Top 8 eigen-images ('eigen-cells')")
 fig
 ```
@@ -298,10 +320,10 @@ ax.set_title("Reconstruction error falls as the eigen-basis grows")
 fig
 ```
 
-A visual confirmation: the same digit reconstructed from an increasing number of
-modes. With only a few eigen-images it is a smudge; by a few dozen it is
-sharp -- and adding the full 64 changes little beyond what 99% variance already
-captured.
+A visual confirmation: the same cell crop reconstructed from an increasing
+number of modes. With only a few eigen-images it is a smudge; by a few dozen it
+sharpens -- and the last modes in the sweep change little beyond what the 99%
+variance milestone already captured.
 
 ```{code-cell} ipython3
 sample_idx = 0
@@ -312,10 +334,10 @@ axes[0].set_title("original", fontsize=9)
 axes[0].set_xticks([]); axes[0].set_yticks([])
 for ax, k in zip(axes[1:], ks_to_show):
     recon = reconstruct_with_k(X_centered, vt, k)[sample_idx] + mean_image
-    ax.imshow(recon.reshape(8, 8), cmap="gray_r")
+    ax.imshow(recon.reshape(img_h, img_w), cmap="gray_r")
     ax.set_title(f"k={k}", fontsize=9)
     ax.set_xticks([]); ax.set_yticks([])
-fig.suptitle(f"Reconstructing one digit (class {y[sample_idx]}) from k eigen-images")
+fig.suptitle(f"Reconstructing one blood-cell crop (class {y[sample_idx]}) from k eigen-images")
 fig
 ```
 
@@ -368,28 +390,30 @@ knn_raw.fit(X_train, y_train)
 acc_raw = knn_raw.score(X_test, y_test)
 
 print(f"1-NN accuracy in the {k_class}-mode eigen-basis : {acc_eigen:.3f}")
-print(f"1-NN accuracy on raw 64 pixels (baseline)      : {acc_raw:.3f}")
+print(f"1-NN accuracy on raw {X.shape[1]} pixels (baseline)   : {acc_raw:.3f}")
 print(f"Dimensionality reduction: {X.shape[1]} -> {k_class} "
       f"({100 * k_class / X.shape[1]:.0f}% of the features), "
       f"accuracy change {acc_eigen - acc_raw:+.3f}")
 ```
 
 The confusion matrix shows *where* the recognizer struggles -- typically among
-digits that share strokes (3/5/8, 4/9). This is exactly the kind of honest,
-class-resolved diagnostic that a single accuracy number hides.
+cell types with similar morphology and staining. This is exactly the kind of
+honest, class-resolved diagnostic that a single accuracy number hides.
 
 ```{code-cell} ipython3
 from sklearn.metrics import confusion_matrix
 
-cm = confusion_matrix(y_test, knn.predict(Z_test))
+cm = confusion_matrix(y_test, knn.predict(Z_test), labels=classes)
 fig, ax = plt.subplots(figsize=(5.5, 5))
 im = ax.imshow(cm, cmap="Blues")
 ax.set_xlabel("Predicted class")
 ax.set_ylabel("True class")
 ax.set_title(f"1-NN confusion matrix in the eigen-basis (k={k_class})")
-ax.set_xticks(range(10)); ax.set_yticks(range(10))
-for i in range(10):
-    for j in range(10):
+ax.set_xticks(range(n_classes)); ax.set_yticks(range(n_classes))
+ax.set_xticklabels(classes)
+ax.set_yticklabels(classes)
+for i in range(n_classes):
+    for j in range(n_classes):
         if cm[i, j]:
             ax.text(j, i, cm[i, j], ha="center", va="center",
                     fontsize=7, color="0.2" if cm[i, j] < cm.max() / 2 else "white")
@@ -415,18 +439,21 @@ from ddm4bio.interpret import interpretation_block
 block = interpretation_block(
     claim=(
         f"An eigen-image basis of {k_class} modes (95% of library variance) "
-        f"compresses 64-pixel digit images to {100 * k_class / X.shape[1]:.0f}% "
-        "of their size while a 1-NN classifier in that basis matches raw-pixel "
-        f"accuracy ({acc_eigen:.2f} vs {acc_raw:.2f}) on held-out data."
+        f"compresses {X.shape[1]}-pixel blood-cell images to "
+        f"{100 * k_class / X.shape[1]:.0f}% of their size while a 1-NN classifier "
+        f"in that basis reaches accuracy {acc_eigen:.2f} versus {acc_raw:.2f} on "
+        "raw pixels, measured on held-out data."
     ),
     confidence="high",
     limitations_list=[
         f"Reaching 90/95/99% of variance needs {k90}/{k95}/{k99} modes "
         "respectively; the long scree tail means fine inter-class detail lives "
         "beyond the leading modes, so aggressive truncation costs the hardest cases.",
-        "Digits are a clean, centered, low-noise library; real biomedical image "
-        "crops carry illumination, registration, and segmentation variation that "
-        "a linear PCA basis does not model.",
+        "We averaged the colour channels to grayscale and used only a seeded "
+        "few-hundred-image subsample; real blood-cell typing exploits colour and "
+        "staining cues, and illumination and segmentation variation that a linear "
+        "PCA basis does not model. Offline the analysis runs on the bundled "
+        "fallback (see the provenance line above), not the real crops.",
         "1-NN is a deliberately simple recognizer chosen for transparency, not "
         "peak accuracy; it is sensitive to the distance metric and to class imbalance.",
         "Accuracy is a single held-out estimate; a repeated or cross-validated "

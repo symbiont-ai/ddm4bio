@@ -25,14 +25,16 @@ No downloads, no network, no credentials. Two offline sources only:
 
 - **Synthetic expression matrix** — `load_subtype_data()` wraps
   `sklearn.datasets.make_blobs` into a samples × "genes" matrix with a *known*
-  number of latent subtypes. Because the ground-truth assignment is known, you
-  can score your clustering against the exact answer with the adjusted Rand
-  index. Think of the blob centers as molecular subtypes and the columns as
-  genes.
-- **Breast-cancer diagnostics** — `load_diagnostic_data()` returns the
-  `sklearn.datasets.load_breast_cancer` bundle (569 samples, 30 features,
-  binary malignant/benign label). It ships inside scikit-learn, so it is fully
-  offline.
+  number of latent subtypes. This stays synthetic on purpose: the clustering
+  ground truth (adjusted Rand index against the planted assignment) only makes
+  sense when the answer is known. Think of the blob centers as molecular
+  subtypes and the columns as genes.
+- **Breast-cancer diagnostics** — `load_diagnostic_data()` pulls the
+  Wisconsin Diagnostic Breast Cancer data through the course data layer,
+  `get_dataset("breast_wisconsin", download=False)` (569 samples, 30 features,
+  binary malignant/benign label). With `download=False` it resolves
+  deterministically to the offline scikit-learn-bundled copy, so it is fully
+  offline and needs no network or credentials.
 
 The data-loading and quality-control plumbing is already written in
 `student/ps6.py`. You implement only the method logic.

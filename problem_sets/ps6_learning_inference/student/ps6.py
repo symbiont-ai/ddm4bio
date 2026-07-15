@@ -71,13 +71,17 @@ def load_subtype_data(
 
 
 def load_diagnostic_data() -> tuple[np.ndarray, np.ndarray, list[str]]:
-    """Bundled breast-cancer diagnostic dataset (provided, offline)."""
-    from sklearn.datasets import load_breast_cancer
+    """Breast-cancer diagnostic dataset via the course data layer (provided).
 
-    bunch = load_breast_cancer()
-    x = np.asarray(bunch.data, dtype=float)
-    y = np.asarray(bunch.target, dtype=int)
-    names = [str(n) for n in bunch.feature_names]
+    Resolves through ``get_dataset("breast_wisconsin", download=False)``, which
+    returns the offline scikit-learn-bundled WDBC data deterministically.
+    """
+    from ddm4bio.datasets import get_dataset
+
+    payload = get_dataset("breast_wisconsin", download=False).payload
+    x = np.asarray(payload["X"], dtype=float)
+    y = np.asarray(payload["y"], dtype=int)
+    names = [str(n) for n in payload["feature_names"]]
     return x, y, names
 
 
@@ -102,9 +106,7 @@ def select_number_of_subtypes(
     raise NotImplementedError
 
 
-def cluster_all_methods(
-    X: np.ndarray, k: int, seed: int = GLOBAL_SEED
-) -> dict[str, np.ndarray]:
+def cluster_all_methods(X: np.ndarray, k: int, seed: int = GLOBAL_SEED) -> dict[str, np.ndarray]:
     """Partition ``X`` into ``k`` clusters with k-means, GMM, and hierarchical.
 
     Return a dict with keys ``kmeans``, ``gmm``, ``hierarchical`` mapping to

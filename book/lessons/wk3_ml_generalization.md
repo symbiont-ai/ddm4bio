@@ -190,41 +190,58 @@ the domain your model was trained on, and refuse to predict outside it.
 
 ## 2. Honest generalization on a real biomedical dataset
 
-We now move from a curve to a classifier and from a toy to a real,
-bundled-with-scikit-learn biomedical dataset: the Wisconsin Diagnostic Breast
-Cancer set. Each sample is a tumor described by 30 features computed from a
-digitized fine-needle-aspirate image (radius, texture, concavity, and so on);
-the label is malignant vs. benign. There is no ground-truth "curve" here -- so
-the whole burden of trust falls on *how we measure generalization*.
+We now move from a curve to a classifier and from a toy to a real biomedical
+dataset: the UCI Heart Disease (processed Cleveland) cohort. Each of the 303
+patients is described by 13 clinical features -- age, sex, chest-pain type,
+resting blood pressure, cholesterol, maximum heart rate, exercise-induced
+angina, ST-segment measurements, and so on -- and the label marks the presence
+of heart disease. There is no ground-truth "curve" here, so the whole burden of
+trust falls on *how we measure generalization*.
+
+We load the data through the course dataset layer. `get_dataset` fetches and
+caches the real UCI CSV when the network and its optional dependencies are
+available, and otherwise returns a clearly labeled synthetic fallback with the
+*same payload shape* (`X` a 303x13 table, `y` a binary label). The analysis
+below runs identically on either, so we always print the provenance first and
+let the reader see which one they got.
 
 ```{code-cell} ipython3
-from sklearn.datasets import load_breast_cancer
+from ddm4bio.datasets import get_dataset
 
-data = load_breast_cancer()
-X, y = data.data, data.target
+ds = get_dataset("heart_uci", download=True)
+print(f"data source: {ds.source}")
+print(f"provenance:  {ds.provenance}")
 
-print(f"Feature matrix X: {X.shape} (samples x features)")
+X = ds.payload["X"]           # 303 x 13 clinical DataFrame (may hold missing values)
+y = ds.payload["y"].to_numpy()
+
+print(f"\nFeature matrix X: {X.shape} (samples x features)")
+print(f"Missing values:   {int(X.isna().sum().sum())} entries (imputed inside the pipeline)")
 print(f"Labels y:         {y.shape}, classes = {np.unique(y)}")
-print(f"Class balance:    {np.bincount(y)} (benign, malignant coding aside)")
+print(f"Class balance:    {np.bincount(y)} (no disease, disease)")
 ```
 
-Our model is a standardized logistic regression, wrapped in a pipeline. Wrapping
-the scaler *inside* the estimator is not cosmetic: it guarantees that when
+Our model is a standardized logistic regression, wrapped in a pipeline. Because
+the raw clinical table has a few missing entries, the first pipeline step is a
+median imputer; the scaler and classifier follow. Wrapping imputation *and*
+scaling *inside* the estimator is not cosmetic: it guarantees that when
 cross-validation or the learning curve refits the model on a training fold, the
-standardization statistics are computed from that fold alone. Fitting a scaler
-on all the data before splitting is the textbook form of **information leakage**,
-and it silently inflates every score below.
+imputation and standardization statistics are computed from that fold alone.
+Fitting an imputer or scaler on all the data before splitting is the textbook
+form of **information leakage**, and it silently inflates every score below.
 
 ```{code-cell} ipython3
+from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 
 def make_model():
     return make_pipeline(
+        SimpleImputer(strategy="median"),
         StandardScaler(),
         LogisticRegression(max_iter=5000, random_state=0),
     )
 
-print("Model: StandardScaler -> LogisticRegression (leakage-safe pipeline)")
+print("Model: SimpleImputer -> StandardScaler -> LogisticRegression (leakage-safe)")
 ```
 
 ### 2.1 The train / validation / test gap
@@ -262,7 +279,7 @@ print(f"\nTrain - validation gap: {train_acc - cv['mean']:+.3f}")
 overfitting: it performs about as well on held-out folds as on the data it
 trained on. The test accuracy landing close to the cross-validated estimate is
 the confirmation we wanted -- our validation procedure was an honest predictor
-of performance on genuinely unseen tumors, and the untouched test set was never
+of performance on genuinely unseen patients, and the untouched test set was never
 allowed to leak into model selection.
 
 ### 2.2 A learning curve: when does overfitting stop?
@@ -379,20 +396,20 @@ from ddm4bio.interpret import interpretation_block
 
 block = interpretation_block(
     claim="The standardized logistic-regression model generalizes on the "
-          "breast-cancer data: it beats chance decisively and, past a few "
-          "hundred training samples, its validation accuracy tracks its "
-          "training accuracy rather than overfitting.",
-    confidence="high",
+          "heart-disease data: it beats chance decisively and its validation "
+          "accuracy tracks its training accuracy rather than overfitting, "
+          "though the train/validation gap stays visible on this small cohort.",
+    confidence="moderate",
     limitations_list=[
         f"Generalization is estimated, not guaranteed: the held-out test "
         f"accuracy ({test_acc:.3f}) and the 5-fold validation estimate "
         f"({cv['mean']:.3f}) agree here, but both are single draws on one "
-        f"cohort of {X.shape[0]} samples.",
+        f"cohort of {X.shape[0]} patients.",
         "The permutation p-value is bounded below by 1/(n_perm+1) = "
         f"{1.0 / (200 + 1):.4f}; it shows significance, not an exact value.",
         "The interpolation/extrapolation demo shows flexible models are "
         "untrustworthy outside their training domain -- the same caution "
-        "applies to this classifier on tumors unlike the training cohort.",
+        "applies to this classifier on patients unlike the training cohort.",
         "No leakage was introduced (scaler fit inside CV folds), but results "
         "still assume the samples are independent and identically "
         "distributed, which clinical cohorts often violate.",
@@ -416,7 +433,7 @@ auto-graded through GitHub Classroom. Building on this lesson, PS3 asks you to:
   before splitting) and measure how much it inflates the cross-validated score
   versus the leakage-safe pipeline -- then explain the mechanism.
 - Rerun the learning curve on progressively smaller subsamples of the
-  breast-cancer data and report the sample size at which the train/validation
+  heart-disease data and report the sample size at which the train/validation
   gap stops closing, using `ddm4bio.methods.learning.learning_curve`.
 - Run a permutation test with `ddm4bio.methods.learning.permutation_test` on a
   deliberately uninformative feature subset and confirm the p-value behaves as

@@ -97,6 +97,60 @@ def make_expression_matrix(
     )
 
 
+def load_single_cell_expression() -> tuple[np.ndarray, np.ndarray | None, str, str]:
+    """Load the real PBMC3k single-cell matrix (or its offline fallback).
+
+    Pulls 10x PBMC3k through ``ddm4bio.datasets.get_dataset`` so the same code
+    path returns the genuine matrix when available and a structurally identical
+    synthetic single-cell matrix offline. The counts are library-size normalized
+    and ``log1p``-compressed (the standard single-cell transform), then reduced
+    to the top-variance genes.
+
+    Returns
+    -------
+    tuple
+        ``(expr, labels, source, provenance)`` where ``expr`` is a
+        ``(n_cells, n_genes)`` log-normalized matrix, ``labels`` is a
+        ``(n_cells,)`` array of cell labels (present only in the fallback; the
+        real payload is unlabelled and yields ``None``), and ``source`` /
+        ``provenance`` are the data-layer strings.
+    """
+    from ddm4bio.datasets import get_dataset
+
+    ds = get_dataset("pbmc3k")
+    payload = ds.payload
+    if hasattr(payload, "X"):  # real AnnData
+        counts = payload.X
+        labels = None
+    else:  # labelled synthetic fallback dict
+        counts = payload["counts"]
+        labels = np.asarray(payload["labels"])
+    counts = np.asarray(counts.toarray() if hasattr(counts, "toarray") else counts, dtype=float)
+
+    library = counts.sum(axis=1, keepdims=True)
+    library[library == 0] = 1.0
+    target = float(np.median(counts.sum(axis=1)))
+    log_counts = np.log1p(counts / library * target)
+
+    n_keep = min(1000, log_counts.shape[1])
+    top_var = np.argsort(log_counts.var(axis=0))[::-1][:n_keep]
+    return log_counts[:, top_var], labels, ds.source, ds.provenance
+
+
+def _label_separation(values: np.ndarray, group_labels: np.ndarray) -> float:
+    """Correlation ratio (eta) of a 1-D score against categorical labels."""
+    values = np.asarray(values, dtype=float)
+    grand = values.mean()
+    total = ((values - grand) ** 2).sum()
+    if total == 0.0:
+        return 0.0
+    between = sum(
+        int((group_labels == g).sum()) * (values[group_labels == g].mean() - grand) ** 2
+        for g in np.unique(group_labels)
+    )
+    return float(np.sqrt(between / total))
+
+
 # --------------------------------------------------------------------------- #
 # Part A / B method logic -- IMPLEMENT THESE FIVE FUNCTIONS.
 # --------------------------------------------------------------------------- #
@@ -242,8 +296,10 @@ def main() -> None:
     print(f"PC2 scores vs batch label                 : {pc2_vs_batch_scores:.3f}")
     print(f"Top-2 variance explained                  : {qc['evr_top2']:.3f}")
     print(f"Rank-2 reconstruction (rel L2)            : {qc['rank2_recon_rel_l2']:.3f}")
-    print(f"PCA scale-sensitive (raw {qc['scaling_raw_top']:.2f} vs "
-          f"scaled {qc['scaling_scaled_top']:.2f}): {qc['scaling_sensitive']}")
+    print(
+        f"PCA scale-sensitive (raw {qc['scaling_raw_top']:.2f} vs "
+        f"scaled {qc['scaling_scaled_top']:.2f}): {qc['scaling_sensitive']}"
+    )
     print(f"ICA source recovery vs ground truth       : {qc['ica_recovery']:.3f}")
     print(f"ICA trustworthy (recovery > 0.9)          : {qc['ica_trustworthy']}")
 
@@ -253,8 +309,32 @@ def main() -> None:
     mask = rng.random((50, 50)) < 0.05
     sparse_true[mask] = rng.standard_normal(int(mask.sum())) * 10.0
     low, sparse = robust_pca(low_true + sparse_true)
-    print(f"Robust PCA low-rank recovery (rel L2)     : "
-          f"{reconstruction_error(low_true, low, kind='rel_l2'):.3f}")
+    print(
+        f"Robust PCA low-rank recovery (rel L2)     : "
+        f"{reconstruction_error(low_true, low, kind='rel_l2'):.3f}"
+    )
+
+    # ---- Part B (real data): PCA of a single-cell expression matrix ----
+    # The synthetic matrix above is the *validation* fixture (known injected
+    # directions, checked by the autograder). Here we apply the same validated
+    # PCA to real PBMC3k single-cell data pulled through the course data layer,
+    # which falls back to a structurally identical synthetic matrix offline.
+    sc_expr, sc_labels, sc_source, sc_prov = load_single_cell_expression()
+    sc_scores = pca_scores(sc_expr, 2)
+    sc_evr = svd_decompose(sc_expr)["explained_variance_ratio"]
+    print(f"\n[pbmc3k] source={sc_source}: {sc_prov}")
+    print(f"Single-cell matrix (cells x genes)        : {sc_expr.shape}")
+    print(f"Single-cell top-2 variance explained      : {float(sc_evr[:2].sum()):.3f}")
+    if sc_labels is not None:
+        print(
+            f"PC1 vs provided cell labels (eta)         : "
+            f"{_label_separation(sc_scores[:, 0], sc_labels):.3f}"
+        )
+    else:
+        print(
+            "PC1 vs cell labels                        : "
+            "real payload is unlabelled; read PCs from gene loadings"
+        )
 
     confidence = "high" if qc["ica_trustworthy"] and qc["pc1_vs_bio"] > 0.9 else "moderate"
     block = interpretation_block(

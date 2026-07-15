@@ -258,19 +258,21 @@ def residual_structure(residuals: np.ndarray) -> dict[str, Any]:
 
 
 def load_breast_cancer_frame():
-    """Load the scikit-learn breast-cancer panel as a labelled DataFrame.
+    """Load the breast-cancer panel as a labelled DataFrame via the data layer.
 
-    Provided for you. Returns ``(x, y, frame)`` where ``frame`` carries the
-    features plus a ``target`` column so ``ddm4bio.qc.qc_tabular`` reports class
-    balance.
+    Provided for you. Loaded through :func:`ddm4bio.datasets.get_dataset` with
+    ``download=False`` (offline, deterministic: the scikit-learn bundled WDBC
+    data, or a synthetic fallback only if scikit-learn is absent). Returns
+    ``(x, y, frame)`` where ``frame`` carries the features plus a ``target``
+    column so ``ddm4bio.qc.qc_tabular`` reports class balance.
     """
-    import pandas as pd
-    from sklearn.datasets import load_breast_cancer
+    from ddm4bio.datasets import get_dataset
 
-    data = load_breast_cancer()
-    x = np.asarray(data.data, dtype=float)
-    y = np.asarray(data.target, dtype=int)
-    frame = pd.DataFrame(x, columns=list(data.feature_names))
+    payload = get_dataset("breast_wisconsin", download=False).payload
+    frame = payload["X"].copy()
+    frame.columns = list(payload["feature_names"])
+    x = frame.to_numpy(dtype=float)
+    y = np.asarray(payload["y"], dtype=int)
     frame["target"] = y
     return x, y, frame
 
@@ -302,9 +304,7 @@ def main() -> None:
     print()
 
     sparse = sparse_biomarkers(x_bc, y_bc, seed=GLOBAL_SEED)
-    stab = stability_selection(
-        x_bc, y_bc, n_boot=100, alpha=0.02, threshold=0.6, seed=GLOBAL_SEED
-    )
+    stab = stability_selection(x_bc, y_bc, n_boot=100, alpha=0.02, threshold=0.6, seed=GLOBAL_SEED)
     feature_names = list(frame.columns[:-1])
     struct = residual_structure(fit["mean_residuals"])
 

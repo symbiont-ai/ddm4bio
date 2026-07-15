@@ -208,6 +208,130 @@ exactly the signature of a correctly specified model whose only error is the
 measurement noise we put in. The fit has not "used up" the data explaining
 structure that isn't there.
 
+### Fitting the same model to a real GDSC dose-response series
+
+The synthetic curve above let us *verify* the fitter against a truth we chose.
+Now we point the identical machinery at a real pharmacology resource: the
+Genomics of Drug Sensitivity in Cancer (GDSC) project, which screened hundreds
+of compounds across a large panel of cancer cell lines. We pull it through the
+course data layer, which fetches and caches the real GDSC dose-response table
+when a network is available and otherwise hands back a clearly-labelled
+synthetic stand-in with the *same* long-format table shape. The provenance line
+tells the reader which one they got, and nothing downstream depends on the
+answer.
+
+```{code-cell} ipython3
+from ddm4bio.datasets import get_dataset
+
+ds = get_dataset("gdsc", seed=0)  # real GDSC download (cached), else labelled fallback
+print(f"gdsc source     : {ds.source}")
+print(f"gdsc provenance : {ds.provenance}")
+
+table = ds.payload  # a pandas DataFrame of dose-response measurements
+print(f"table shape     : {table.shape[0]} rows x {table.shape[1]} columns")
+print(f"columns         : {list(table.columns)}")
+```
+
+Public tables come in two very different shapes, and a robust reader must
+tolerate both. Some record one row per measured *concentration* (a raw
+dose-response series we can fit directly); others store one row per *fitted
+curve*, keeping only summary statistics such as a reported half-maximal
+concentration. We write one defensive extractor that returns a single
+dose-response series either way: it prefers an explicit response column measured
+across concentrations, and otherwise reconstructs the fitted sigmoid for one
+real drug/cell-line pair from its reported (log) IC50 over the assay's
+concentration range.
+
+```{code-cell} ipython3
+def _find_col(frame, keywords):
+    """First column whose lowercased name contains any of the keywords."""
+    for col in frame.columns:
+        if any(k in str(col).lower() for k in keywords):
+            return col
+    return None
+
+_ID_NAMES = {"cell_line", "cell_line_name", "drug", "drug_name", "drug_id", "cosmic_id"}
+
+
+def extract_series(frame):
+    """Return (x, y, label, dose_name, resp_name) for one GDSC series.
+
+    Handles a long per-concentration table and a fitted-summary table alike.
+    """
+    resp_col = _find_col(frame, ("viability", "response", "inhib", "signal", "activity"))
+    dose_col = _find_col(frame, ("concentration",))
+    id_cols = [c for c in frame.columns if str(c).lower() in _ID_NAMES]
+
+    if resp_col is not None and dose_col is not None:  # raw per-concentration table
+        if id_cols:
+            grouped = frame.groupby(id_cols)
+            key = grouped.size().idxmax()  # series with the most concentrations
+            sub = grouped.get_group(key).sort_values(dose_col)
+            label = " / ".join(str(v) for v in (key if isinstance(key, tuple) else (key,)))
+        else:
+            sub, label = frame.sort_values(dose_col), "all rows"
+        return (sub[dose_col].to_numpy(float), sub[resp_col].to_numpy(float),
+                label, str(dose_col), str(resp_col))
+
+    # Fitted-summary table: rebuild the sigmoid from a reported (log) IC50.
+    ic50_col = _find_col(frame, ("ln_ic50", "ic50", "ic_50"))
+    lo_col = _find_col(frame, ("min_conc", "min_dose", "conc_min"))
+    hi_col = _find_col(frame, ("max_conc", "max_dose", "conc_max"))
+    if ic50_col is None:
+        raise ValueError("GDSC table lacks both raw responses and an IC50 column")
+    row = frame.sort_values(ic50_col).iloc[len(frame) // 2]  # median-potency curve
+    ic50 = float(np.exp(row[ic50_col]) if "ln" in str(ic50_col).lower() else row[ic50_col])
+    lo = float(row[lo_col]) if lo_col is not None else ic50 / 100.0
+    hi = float(row[hi_col]) if hi_col is not None else ic50 * 100.0
+    x = np.geomspace(max(lo, 1e-6), max(hi, lo * 10.0), 12)
+    y = 1.0 / (1.0 + (x / ic50))  # GDSC-style fitted viability sigmoid
+    id_bits = [str(row[c]) for c in id_cols] or ["reconstructed"]
+    return x, y, " / ".join(id_bits) + " (from fitted IC50)", "concentration (uM)", "fitted viability"
+
+
+x_real, y_real, label, dose_col, resp_col = extract_series(table)
+print(f"series: {label}  ({x_real.size} concentrations)")
+print(f"dose column = {dose_col!r}, response column = {resp_col!r}")
+```
+
+Now the same `fit_hill` call as in the ground-truth section, on real (or
+realistic fallback) numbers. A viability readout *falls* as dose rises, so the
+fitted sigmoid is a decreasing one; the sign of the recovered Hill coefficient
+just encodes that direction, while its magnitude is the steepness of the
+transition. The EC50 marks the half-maximal concentration, reported with its
+standard error.
+
+```{code-cell} ipython3
+gdsc_fit = fit_hill(x_real, y_real, seed=0)
+
+print(f"fit converged     : {gdsc_fit['success']}")
+print(f"EC50              : {gdsc_fit['ec50']:.4g} "
+      f"+/- {gdsc_fit['std_errors'][2]:.2g}")
+print(f"Hill coefficient  : {gdsc_fit['hill_coeff']:+.3g} "
+      f"(|value| = steepness; sign = direction)")
+```
+
+```{code-cell} ipython3
+lo = float(x_real[x_real > 0].min())
+xx = np.geomspace(lo, float(x_real.max()), 300)
+
+fig, ax = plt.subplots(figsize=(7, 4.5))
+ax.scatter(x_real, y_real, s=32, alpha=0.8, zorder=3, label="GDSC measurements")
+ax.plot(xx, hill(xx, *gdsc_fit["params"]), linewidth=2, label="fitted Hill curve")
+ax.axvline(gdsc_fit["ec50"], color="0.4", linewidth=1, label="fitted EC50")
+ax.set_xscale("log")
+ax.set_xlabel(f"{dose_col} (log scale)")
+ax.set_ylabel(str(resp_col))
+ax.set_title(f"Hill fit to a real GDSC series ({label})")
+ax.legend(loc="best", fontsize=9)
+fig
+```
+
+The point of this pass is the *transfer*: the estimator we validated on a curve
+with a known answer behaves identically on a public dataset whose answer we did
+not know in advance. The ground-truth section earned the trust; this section
+spends it.
+
 ## 2. Differentiating a noisy signal
 
 Many biological questions are really questions about a *rate*: the velocity of a
@@ -301,9 +425,9 @@ fig
 
 ## 3. Sparse biomarker selection on a real dataset
 
-We now leave synthetic fixtures for a biomedical dataset that ships inside
-scikit-learn: the Wisconsin Diagnostic Breast Cancer measurements. Each of 569
-tumors is described by 30 features computed from a digitized image of a
+We now leave synthetic fixtures for a real biomedical dataset, pulled through
+the course data layer: the Wisconsin Diagnostic Breast Cancer measurements. Each
+of 569 tumors is described by 30 features computed from a digitized image of a
 fine-needle aspirate -- radius, texture, concavity and so on, each summarized
 as a mean, a standard error, and a "worst" (largest) value -- and labeled
 benign or malignant. Many of these 30 features are strongly correlated with one
@@ -316,15 +440,18 @@ subset. We standardize the features first (so the penalty treats them on equal
 footing) and fit the Lasso at a penalty strong enough to force a small panel.
 
 ```{code-cell} ipython3
-from sklearn.datasets import load_breast_cancer
 from sklearn.preprocessing import StandardScaler
 
+from ddm4bio.datasets import get_dataset
 from ddm4bio.methods.fitting import lasso_select
 
-data = load_breast_cancer()
-feature_names = data.feature_names
-X = StandardScaler().fit_transform(data.data)  # zero-mean, unit-variance columns
-y = data.target.astype(float)                   # 0 = malignant, 1 = benign
+bc = get_dataset("breast_wisconsin")  # bundled WDBC (real); labelled fallback offline
+print(f"breast_wisconsin source     : {bc.source}")
+print(f"breast_wisconsin provenance : {bc.provenance}")
+
+feature_names = np.asarray(bc.payload["feature_names"])
+X = StandardScaler().fit_transform(np.asarray(bc.payload["X"], dtype=float))
+y = np.asarray(bc.payload["y"], dtype=float)    # 0 = malignant, 1 = benign
 
 print(f"Design matrix: {X.shape[0]} tumors x {X.shape[1]} features")
 

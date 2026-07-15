@@ -285,7 +285,122 @@ unstable split that resampling immediately flags. The lesson generalizes: on rea
 data, a cluster you cannot reproduce under subsampling should be reported as
 tentative at best, never as a discovered subtype.
 
-## 3. A diagnostic classifier with a confidence interval
+## 3. Clustering real single-cell data
+
+The blob fixtures earned our trust in the machinery; now we point it at data with
+no answer key. We load the 10x Genomics PBMC3k peripheral-blood single-cell
+RNA-seq matrix through the course data layer. `get_dataset` returns the true 10x
+matrix when it can reach the source and a labelled synthetic fallback with the
+same payload shape otherwise, so the analysis below runs identically either way --
+the provenance line tells the reader which one they got.
+
+```{code-cell} ipython3
+from sklearn.decomposition import PCA
+
+from ddm4bio.datasets import get_dataset
+
+
+def unpack_singlecell(payload):
+    """Return (counts, labels) from an AnnData or a plain-dict payload."""
+    if hasattr(payload, "X"):  # AnnData: counts in .X, no ground-truth labels
+        return payload.X, None
+    return payload["counts"], payload.get("labels")
+
+
+ds_sc = get_dataset("pbmc3k")
+print(f"pbmc3k source: {ds_sc.source}")
+print(f"provenance: {ds_sc.provenance}")
+
+counts_raw, sc_labels = unpack_singlecell(ds_sc.payload)
+print(f"Raw counts: {counts_raw.shape[0]} cells x {counts_raw.shape[1]} genes")
+```
+
+Single-cell counts are not a feature matrix yet. We cap the cell count so the
+consensus matrix stays affordable for either payload, normalize each cell to a
+common library size and take `log1p`, keep the most variable genes, and reduce to
+a handful of principal components -- the standard route from raw UMIs to a
+geometry k-means can work in.
+
+```{code-cell} ipython3
+rng = np.random.default_rng(0)
+n_keep = min(600, counts_raw.shape[0])
+cells = np.sort(rng.choice(counts_raw.shape[0], size=n_keep, replace=False))
+
+sub = counts_raw[cells]
+counts_sc = sub.toarray() if hasattr(sub, "toarray") else np.asarray(sub, dtype=float)
+counts_sc = np.asarray(counts_sc, dtype=float)
+labels_sc = None if sc_labels is None else np.asarray(sc_labels)[cells]
+
+library = counts_sc.sum(axis=1, keepdims=True)
+library[library == 0] = 1.0
+logn = np.log1p(counts_sc / library * 1e4)
+
+n_top = min(1000, logn.shape[1])
+top = np.argsort(logn.var(axis=0))[::-1][:n_top]
+embed = PCA(
+    n_components=min(30, n_keep - 1, n_top), random_state=0
+).fit_transform(logn[:, top])
+print(f"Working embedding: {embed.shape} (cells x PCs)")
+```
+
+We now run the *same* model-selection and clustering steps validated on the
+blobs. With no truth column we lean on the two label-free signals the earlier
+sections built: whether k-means and the Gaussian mixture agree, and how ambiguous
+the consensus matrix is. When the payload is the labelled fallback we can also
+score recovery against its planted cell types.
+
+```{code-cell} ipython3
+sil_sc = select_k_silhouette(embed, range(2, 8), seed=0)
+k_sc = sil_sc["best_k"]
+
+km_sc = kmeans_cluster(embed, k_sc, seed=0)
+gmm_sc = gmm_cluster(embed, k_sc, seed=0)
+con_sc = consensus_cluster(embed, k_sc, n_boot=25, subsample=0.8, seed=0)
+amb_sc = consensus_ambiguity(con_sc["consensus_matrix"])
+
+print(f"Silhouette picks k = {k_sc}")
+print(f"k-means vs. GMM ARI:        {adjusted_rand_score(km_sc, gmm_sc):.3f}")
+print(f"Consensus ambiguity at k={k_sc}: {amb_sc:.1%}")
+if labels_sc is not None:
+    print(f"k-means ARI vs. provided labels: {adjusted_rand_score(labels_sc, km_sc):.3f}")
+else:
+    print("No ground-truth labels in this payload; agreement and stability are the QC.")
+```
+
+The left panel shows the cells in their first two principal components, coloured
+by the k-means partition; the right panel is the consensus matrix, reordered by
+consensus label. Tight, well-separated colour groups and crisp block-diagonal
+consensus are the label-free stand-ins for the ARI we no longer have.
+
+```{code-cell} ipython3
+fig, axes = plt.subplots(1, 2, figsize=(10, 4.2))
+
+axes[0].scatter(embed[:, 0], embed[:, 1], c=km_sc, s=10, cmap="tab10")
+axes[0].set_title(f"PBMC cells in PC space (k-means, k={k_sc})")
+axes[0].set_xlabel("PC 1")
+axes[0].set_ylabel("PC 2")
+
+im = axes[1].imshow(
+    order_by_labels(con_sc["consensus_matrix"], con_sc["labels"]),
+    cmap="magma", vmin=0, vmax=1,
+)
+axes[1].set_title(f"Consensus (ambiguity {amb_sc:.0%})")
+axes[1].set_xlabel("Cell (reordered)")
+axes[1].set_ylabel("Cell (reordered)")
+fig.colorbar(im, ax=axes[1], shrink=0.8, label="Co-clustering frequency")
+
+fig.suptitle(f"Clustering real single-cell data (source: {ds_sc.source})")
+fig
+```
+
+**QC note.** On real cells there is no ARI to hide behind, so the reportable
+evidence is exactly what survived resampling: the number of clusters the
+silhouette settles on, the agreement between two different algorithms, and a
+consensus ambiguity low enough to trust the partition. If the loader fell back to
+synthetic data the provenance line above says so -- and the planted labels then
+let us confirm the pipeline end to end before a real cohort arrives with none.
+
+## 4. A diagnostic classifier with a confidence interval
 
 We now switch to supervised learning on a real-ish biomedical dataset: the
 Wisconsin breast-cancer dataset bundled with scikit-learn, in which 30 features
@@ -300,14 +415,18 @@ performance estimate honest; a model scored on data it trained on will always
 look better than it is.
 
 ```{code-cell} ipython3
-from sklearn.datasets import load_breast_cancer
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 
-data = load_breast_cancer()
-X_bc, y_bc = data.data, data.target  # target: 0 = malignant, 1 = benign
+ds_bc = get_dataset("breast_wisconsin")
+print(f"breast_wisconsin source: {ds_bc.source}")
+print(f"provenance: {ds_bc.provenance}")
+
+X_bc = np.asarray(ds_bc.payload["X"], dtype=float)
+y_bc = np.asarray(ds_bc.payload["y"], dtype=int)  # 0 = malignant, 1 = benign
+bc_feature_names = np.asarray(ds_bc.payload["feature_names"])
 
 X_train, X_test, y_train, y_test = train_test_split(
     X_bc, y_bc, test_size=0.30, stratify=y_bc, random_state=0
@@ -357,7 +476,7 @@ chance line, so the performance is not a fluke of one lucky split. Had the
 interval reached down toward 0.5 we would have reported the result as
 inconclusive regardless of how high the point estimate looked.
 
-## 4. Screening many features while controlling false discovery
+## 5. Screening many features while controlling false discovery
 
 A common first-pass analysis asks, for each feature separately, whether it
 differs between malignant and benign tumors. With 30 features that is 30
@@ -400,7 +519,7 @@ above the dashed line clear the FDR threshold.
 order = np.argsort(fdr["qvalues"])
 q_sorted = fdr["qvalues"][order]
 reject_sorted = fdr["reject"][order]
-feature_names = np.array(data.feature_names)[order]
+feature_names = bc_feature_names[order]
 
 colors = ["#D55E00" if r else "#999999" for r in reject_sorted]
 neglog_q = -np.log10(q_sorted + 1e-300)
@@ -422,7 +541,7 @@ would have been most likely to over-sell. Reporting corrected significance is no
 optional bookkeeping -- it is the difference between a feature list you can defend
 and one that is partly chance.
 
-## 5. Interpretation
+## 6. Interpretation
 
 Every ddm4bio analysis closes with an explicit interpretation block: a single
 claim, an honest confidence level backed by named evidence, and a list of stated

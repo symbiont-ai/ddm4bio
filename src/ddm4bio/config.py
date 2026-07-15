@@ -14,8 +14,16 @@ import numpy as np
 
 GLOBAL_SEED = 20260714
 
-RAW_DIR = Path("data/raw")
-CACHE_DIR = Path(os.environ.get("DDM4BIO_CACHE", "data/cache"))
+# Anchor data paths to the repository root (this file is src/ddm4bio/config.py),
+# so caching is stable regardless of the current working directory -- e.g. when a
+# notebook executes from book/lessons/ during a JupyterBook build.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+RAW_DIR = _REPO_ROOT / "data" / "raw"
+CACHE_DIR = (
+    Path(os.environ["DDM4BIO_CACHE"]).resolve()
+    if os.environ.get("DDM4BIO_CACHE")
+    else _REPO_ROOT / "data" / "cache"
+)
 
 
 @dataclass(frozen=True)

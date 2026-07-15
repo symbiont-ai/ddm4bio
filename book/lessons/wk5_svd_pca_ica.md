@@ -69,55 +69,141 @@ this is just the singular value decomposition of the mean-centered data matrix:
 the right singular vectors are the principal axes, and the squared singular
 values are proportional to the variance captured along each axis.
 
-To see PCA work, we build a dataset that is *genuinely* low-dimensional. We draw
-100 samples that live on a random 2-dimensional plane inside 8-dimensional
-feature space, then sprinkle a little isotropic measurement noise on top. Because
-the underlying generator has rank 2, an honest dimensionality-reduction method
-should report that two components explain nearly all of the variance.
+To make PCA concrete we point it at real single-cell data. The PBMC3k dataset
+is a classic 10x Genomics assay of peripheral-blood mononuclear cells from a
+healthy donor: thousands of cells, each a sparse vector of gene counts. We pull
+it through the course data layer, which fetches the genuine 10x matrix when it
+can and otherwise returns a structurally identical synthetic single-cell matrix
+so the analysis runs anywhere. The provenance line printed below tells you which
+one you received; the analysis is written to work for either.
 
 ```{code-cell} ipython3
-from ddm4bio.methods.decomposition import pca_reduce, explained_variance_ratio
+from ddm4bio.datasets import get_dataset
+from ddm4bio.methods.decomposition import explained_variance_ratio, pca_reduce
 
-rng = np.random.default_rng(0)
+ds = get_dataset("pbmc3k")
+payload = ds.payload
 
-n_samples, n_features, true_rank = 100, 8, 2
+# get_dataset returns a real AnnData (with .X) or a labelled fallback dict.
+if hasattr(payload, "X"):
+    counts = payload.X
+    labels = None
+    obs = getattr(payload, "obs", None)
+    if obs is not None:
+        for col in ("cell_type", "cell_types", "louvain", "leiden", "bulk_labels"):
+            if col in obs:
+                labels = np.asarray(obs[col])
+                break
+else:
+    counts = payload["counts"]
+    labels = np.asarray(payload["labels"])
 
-# Rank-2 generator: latent scores (100 x 2) times loadings (2 x 8).
-latent = rng.standard_normal((n_samples, true_rank))
-loadings = rng.standard_normal((true_rank, n_features))
-noise = 0.05 * rng.standard_normal((n_samples, n_features))
-X = latent @ loadings + noise
+# 10x data ships as a sparse matrix; densify for the linear algebra below.
+counts = np.asarray(counts.toarray() if hasattr(counts, "toarray") else counts, dtype=float)
 
-scores = pca_reduce(X, n_components=2)
-evr = explained_variance_ratio(X)
-
-print(f"Data matrix X: {X.shape} (samples x features)")
-print(f"PCA scores:    {scores.shape} (samples x components)")
-print(f"Explained-variance ratio (all components):\n{np.round(evr, 4)}")
+print(f"[pbmc3k] source={ds.source}: {ds.provenance}")
+groups = "unlabelled" if labels is None else f"{np.unique(labels).size} label groups"
+print(f"expression matrix: {counts.shape[0]} cells x {counts.shape[1]} genes ({groups})")
 ```
 
-The scree plot below shows how quickly the explained variance decays. A sharp
-"elbow" after the second component is the visual signature of a rank-2 dataset:
-components beyond the elbow are capturing noise, not structure.
+Raw UMI counts are heavy-tailed and vary in sequencing depth from cell to cell,
+so we apply the standard single-cell transform before any linear algebra:
+normalize each cell to a common library size, then take `log1p`. We then keep
+the most variable genes, which concentrates the biological signal and keeps the
+full-width real matrix (tens of thousands of genes) tractable.
+
+```{code-cell} ipython3
+# Library-size normalize, then log1p-compress the counts.
+library = counts.sum(axis=1, keepdims=True)
+library[library == 0] = 1.0
+target = float(np.median(counts.sum(axis=1)))
+log_counts = np.log1p(counts / library * target)
+
+# Restrict to the top-variance genes (all of them when the matrix is already small).
+n_keep = min(1000, log_counts.shape[1])
+top_var = np.argsort(log_counts.var(axis=0))[::-1][:n_keep]
+expr = log_counts[:, top_var]
+
+scores = pca_reduce(expr, n_components=2)
+evr = explained_variance_ratio(expr)
+
+print(f"kept {expr.shape[1]} high-variance genes; PCA scores {scores.shape}")
+print(f"leading explained-variance ratios: {np.round(evr[:5], 4)}")
+```
+
+Real expression data does not collapse to an exact low rank the way a clean
+synthetic fixture does; instead the scree curve decays smoothly, and the "elbow"
+is a judgement call about where genuine structure fades into the long tail of
+biological and technical noise. We plot only the leading components, since the
+tail is a near-flat noise floor.
 
 ```{code-cell} ipython3
 from ddm4bio.viz.plots import scree_plot
 
-ax = scree_plot(evr)
+n_show = min(20, evr.size)
+ax = scree_plot(evr[:n_show])
 ax.figure  # end the cell with the Figure so it renders in the notebook output
 ```
 
+Projecting the cells onto their first two principal components gives the
+familiar single-cell scatter. When the payload carries cell labels we colour by
+them; the real 10x matrix ships unlabelled, so the same cell then renders a
+single-colour cloud whose structure we read from the loadings instead.
+
 ```{code-cell} ipython3
-captured = float(evr[:true_rank].sum())
-print(f"QC note: the first {true_rank} components capture "
-      f"{captured:.1%} of total variance -- consistent with a rank-{true_rank} "
-      f"generator plus small isotropic noise.")
+import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(5.5, 4.5))
+if labels is not None:
+    for g in np.unique(labels):
+        sel = labels == g
+        ax.scatter(scores[sel, 0], scores[sel, 1], s=12, label=str(g))
+    ax.legend(title="label", fontsize=8, loc="best")
+else:
+    ax.scatter(scores[:, 0], scores[:, 1], s=12)
+ax.set_xlabel("PC1")
+ax.set_ylabel("PC2")
+ax.set_title("PBMC cells in principal-component space")
+fig
 ```
 
-**QC note.** Two components capture roughly 99.9% of the variance, exactly what
-we expect when a rank-2 signal is buried under a thin layer of noise. The
-remaining components each explain a negligible slice -- they are describing the
-noise floor, not biology.
+Finally we quantify how much of each leading component lines up with the provided
+grouping, using the correlation ratio (eta): the fraction of a component's
+spread that is explained by label membership, a number in `[0, 1]`.
+
+```{code-cell} ipython3
+def label_separation(values, group_labels):
+    """Correlation ratio (eta) of a 1-D score against categorical labels."""
+    values = np.asarray(values, dtype=float)
+    grand = values.mean()
+    total = ((values - grand) ** 2).sum()
+    if total == 0.0:
+        return 0.0
+    between = sum(
+        int((group_labels == g).sum()) * (values[group_labels == g].mean() - grand) ** 2
+        for g in np.unique(group_labels)
+    )
+    return float(np.sqrt(between / total))
+
+
+captured = float(evr[:2].sum())
+if labels is not None:
+    eta1 = label_separation(scores[:, 0], labels)
+    eta2 = label_separation(scores[:, 1], labels)
+    print(f"QC note ({ds.source} data): the top two PCs capture {captured:.1%} of "
+          f"variance; label separation is eta(PC1)={eta1:.2f}, eta(PC2)={eta2:.2f}.")
+else:
+    print(f"QC note ({ds.source} data): the top two PCs capture {captured:.1%} of "
+          "variance; this payload ships without cell labels, so the leading axes "
+          "must be read from their gene loadings, not a provided grouping.")
+```
+
+**QC note.** On the labelled fallback the leading component already pulls the
+synthetic cell types apart (a high eta), and a handful of components carry most
+of the variance -- exactly the low-dimensional structure PCA is meant to
+surface. On the real unlabelled matrix we instead lean on the scree shape and
+the gene loadings, and we resist over-reading components buried in the noise
+tail.
 
 ## 2. ICA with known ground truth
 
