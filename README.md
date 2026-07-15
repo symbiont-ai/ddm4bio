@@ -49,7 +49,7 @@ pip install -e ".[imaging]"     # medmnist, scikit-image, nibabel
 ```
 src/ddm4bio/   shared library (config, qc, viz, methods, datasets, utils, interpret)
 book/          JupyterBook course site: 8 weekly lessons + syllabus, schedule, references
-problem_sets/  7 problem sets (README + student scaffold + solution + autograder + rubric)
+problem_sets/  7 problem-set briefs (README + student scaffold + rubric); solutions + autograders are in the private instructor repo
 capstone/      spec, rubric, runnable template, and section linter
 data/          DATA_CARD.md + gitignored raw/ and cache/
 tests/         library + data-layer unit tests
