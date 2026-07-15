@@ -6,6 +6,7 @@ parts:
       - file: syllabus
       - file: schedule
       - file: how-it-works
+      - file: data-and-ground-truth
   - caption: Lessons
     chapters:
       - file: lessons/wk1_eigen_images
