@@ -147,8 +147,10 @@ def run_qc(signal: np.ndarray, m_values: list[int]) -> None:
     k = int(np.count_nonzero(signal))
     undersampled = [m for m in m_values if m < n]
     print(f"QC: length-{n} signal with {k} nonzeros (sparsity {k / n:.1%}).")
-    print(f"    {len(undersampled)}/{len(m_values)} candidate measurement counts are "
-          f"undersampled (m < n) -- the compressed-sensing regime.")
+    print(
+        f"    {len(undersampled)}/{len(m_values)} candidate measurement counts are "
+        f"undersampled (m < n) -- the compressed-sensing regime."
+    )
 
 
 def main() -> None:
@@ -158,8 +160,10 @@ def main() -> None:
     m_values = [8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 64, 80]
 
     n_coeff, source = real_ecg_effective_sparsity()
-    print(f"Real ECG (MIT-BIH via get_dataset -> source={source}): "
-          f"{n_coeff} Fourier coefficients hold 95% of a 256-sample segment's energy")
+    print(
+        f"Real ECG (MIT-BIH via get_dataset -> source={source}): "
+        f"{n_coeff} Fourier coefficients hold 95% of a 256-sample segment's energy"
+    )
     print("  -> real biosignals are compressible, which is what lets compressed sensing apply.\n")
 
     print("== Quality control (before results) ==")
