@@ -19,15 +19,6 @@ dataset with a **synthetic ground-truth fixture** — see
 | **W8** | Deep learning for dynamics, reinforcement learning, and foundation models: autoencoders, shallow sensing-and-reconstruction (SHRED) architectures, reinforcement learning, and transformers. | Learning latent representations, optimizing dosing policies, and modeling clinical text with large language models. | Synthetic demonstrations (dependency-light) |
 
 ```{note}
-Every real dataset above is open and loaded through the course data layer, which
-downloads and caches it on first use (and falls back to a labeled synthetic stand-in
-when run fully offline). One dataset in the original plan — **NYU fastMRI** for MRI
-reconstruction — is *credentialed* (it requires a signed Data Sharing Agreement), so it
-is never auto-downloaded; Week 4 demonstrates compressed sensing on synthetic sparse
-signals instead. Full provenance, licenses, and citations are in the data card.
-```
-
-```{note}
 Where a lesson cites a chapter number, that number refers to J. N. Kutz's textbook
 *Data-Driven Modeling & Scientific Computation* (2nd ed.), offered as optional reading
 for a deeper treatment. This course explains every concept in its own words and does not
