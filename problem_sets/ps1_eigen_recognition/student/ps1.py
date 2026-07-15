@@ -306,15 +306,34 @@ def main() -> None:
     for key, value in solver_stats.items():
         print(f"  {key}: {value}")
 
-    # Data for Parts B-D, via the course data layer. Provenance is printed so the
-    # reader sees whether the run used real BloodMNIST or the bundled fallback.
+    # Data for Parts B-D: REAL BloodMNIST via the course data layer. download
+    # defaults to True, so the loader prefers the real MedMNIST crops and falls
+    # back gracefully to the bundled stack (same payload shape) only when offline.
+    # Provenance is printed so the reader sees which source the run used.
+    from sklearn.model_selection import train_test_split
+
     from ddm4bio.datasets import get_dataset
 
-    provenance = get_dataset("bloodmnist", download=False, seed=GLOBAL_SEED)
-    print(f"\nApplication data: BloodMNIST via get_dataset -> source={provenance.source}")
-    print(f"  {provenance.provenance}")
+    ds = get_dataset("bloodmnist", seed=GLOBAL_SEED)
+    print(f"\nApplication data: BloodMNIST via get_dataset -> source={ds.source}")
+    print(f"  {ds.provenance}")
 
-    x_train, x_test, y_train, y_test = load_digits_split()
+    # Real train_images are (N, 28, 28, 3) uint8 with integer cell-type labels;
+    # the offline fallback is (N, 8, 8, 1). Averaging over the trailing colour
+    # axis yields grayscale in both cases, so the pipeline never sees the source.
+    # A seeded few-hundred-image subsample keeps the run brisk.
+    train_images = ds.payload["train_images"]
+    train_labels = ds.payload["train_labels"].ravel()
+    rng_sub = np.random.default_rng(GLOBAL_SEED)
+    n_sub = min(400, train_images.shape[0])
+    subsample = rng_sub.choice(train_images.shape[0], size=n_sub, replace=False)
+    images_gray = train_images[subsample].mean(axis=-1)  # (n_sub, H, W) grayscale
+    x = images_gray.reshape(n_sub, -1).astype(float)  # (n_sub, H*W), samples in rows
+    y = train_labels[subsample]
+
+    x_train, x_test, y_train, y_test = train_test_split(
+        x, y, test_size=0.30, random_state=GLOBAL_SEED, stratify=y
+    )
     n_classes = int(np.unique(y_train).size)
     n_features = x_train.shape[1]
     chance = 1.0 / n_classes

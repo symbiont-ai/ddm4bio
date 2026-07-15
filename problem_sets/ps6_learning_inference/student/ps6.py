@@ -85,6 +85,65 @@ def load_diagnostic_data() -> tuple[np.ndarray, np.ndarray, list[str]]:
     return x, y, names
 
 
+def _unpack_singlecell(payload: Any) -> tuple[Any, np.ndarray | None]:
+    """Return ``(counts, labels)`` from an AnnData or a plain-dict payload.
+
+    The real 10x payload is an ``anndata.AnnData`` (raw counts in ``.X``, no
+    ground-truth cell types); the synthetic fallback is a dict with ``counts``
+    and planted ``labels``.
+    """
+    if hasattr(payload, "X"):  # AnnData: counts in .X, no ground-truth labels
+        return payload.X, None
+    return payload["counts"], payload.get("labels")
+
+
+def load_singlecell_data(
+    n_keep: int = 600,
+    n_top: int = 1000,
+    n_pcs: int = 30,
+    seed: int = GLOBAL_SEED,
+) -> tuple[np.ndarray, np.ndarray | None, str]:
+    """Real PBMC3k single-cell RNA-seq reduced to a clustering-ready embedding.
+
+    Loads the 10x Genomics PBMC3k matrix through ``get_dataset("pbmc3k")``
+    (``download=True`` by default, with a graceful synthetic fallback when the
+    source is unreachable), unpacks the AnnData-or-dict payload to raw counts
+    (plus planted labels when the fallback provides them), then normalizes each
+    cell to a common library size, takes ``log1p``, keeps the most variable
+    genes, and reduces to principal components.
+
+    Returns ``(embedding, labels, source)`` where ``embedding`` has shape
+    ``(n_cells, n_pcs)``, ``labels`` are the planted cell types when the payload
+    carries them (synthetic fallback) else ``None``, and ``source`` is the
+    provenance tag (``"real"`` or ``"fallback"``).
+    """
+    from sklearn.decomposition import PCA
+
+    from ddm4bio.datasets import get_dataset
+
+    ds = get_dataset("pbmc3k", seed=seed)
+    counts_raw, raw_labels = _unpack_singlecell(ds.payload)
+
+    rng = np.random.default_rng(seed)
+    n_keep = min(n_keep, counts_raw.shape[0])
+    cells = np.sort(rng.choice(counts_raw.shape[0], size=n_keep, replace=False))
+
+    sub = counts_raw[cells]
+    counts = sub.toarray() if hasattr(sub, "toarray") else np.asarray(sub)
+    counts = np.asarray(counts, dtype=float)
+    labels = None if raw_labels is None else np.asarray(raw_labels)[cells]
+
+    library = counts.sum(axis=1, keepdims=True)
+    library[library == 0] = 1.0
+    logn = np.log1p(counts / library * 1e4)
+
+    n_top = min(n_top, logn.shape[1])
+    top = np.argsort(logn.var(axis=0))[::-1][:n_top]
+    n_comp = min(n_pcs, n_keep - 1, n_top)
+    embed = PCA(n_components=n_comp, random_state=seed).fit_transform(logn[:, top])
+    return np.asarray(embed, dtype=float), labels, ds.source
+
+
 # ---------------------------------------------------------------------------
 # (A) Method + (B) Application
 # ---------------------------------------------------------------------------
@@ -259,26 +318,33 @@ def main() -> None:
     """Run the full PS6 workflow end to end and print an interpretation block."""
     seed = GLOBAL_SEED
 
-    # (B) Discover candidate subtypes in a synthetic expression matrix.
-    x_sub, y_true = load_subtype_data(seed=seed)
+    # (B) Discover candidate cell subtypes in REAL single-cell PBMC3k data.
+    embed, sc_labels, sc_source = load_singlecell_data(seed=seed)
+    print(f"pbmc3k source={sc_source} embedding={embed.shape[0]} cells x {embed.shape[1]} PCs")
 
-    # QC plumbing runs before any modeling (provided).
-    print(run_qc(x_sub, y_true).render())
+    # QC plumbing runs before any modeling (provided). With no cell types the
+    # target is a placeholder just for the tabular shape/missingness check.
+    qc_target = sc_labels if sc_labels is not None else np.zeros(embed.shape[0], dtype=int)
+    print(run_qc(embed, qc_target).render())
     print()
 
     # --- From here down you must implement the method functions above. ---
-    sel = select_number_of_subtypes(x_sub, range(1, 7), seed=seed)
+    sel = select_number_of_subtypes(embed, range(1, 7), seed=seed)
     k = sel["best_k_silhouette"]
     print(
         f"Selected k: silhouette={sel['best_k_silhouette']} "
         f"BIC={sel['best_k_bic']} (agree={sel['agree']})"
     )
 
-    labels = cluster_all_methods(x_sub, k=k, seed=seed)
-    ari_km_truth = cluster_agreement(y_true, labels["kmeans"])
-    print(f"ARI vs truth (k-means)={ari_km_truth:.3f}")
+    labels = cluster_all_methods(embed, k=k, seed=seed)
+    ari_km_gmm = cluster_agreement(labels["kmeans"], labels["gmm"])
+    if sc_labels is not None:
+        ari_ref = cluster_agreement(sc_labels, labels["kmeans"])
+        print(f"ARI vs planted labels (k-means)={ari_ref:.3f} | k-means~GMM={ari_km_gmm:.3f}")
+    else:
+        print(f"No ground-truth labels (real cells) | k-means~GMM={ari_km_gmm:.3f}")
 
-    stab = assess_cluster_stability(x_sub, k=k, seed=seed)
+    stab = assess_cluster_stability(embed, k=k, seed=seed)
     print(f"Cluster stability={stab['stability']:.3f} reproducible={stab['is_reproducible']}")
     for w in stab["warnings"]:
         print(f"  WARNING: {w}")
@@ -302,18 +368,19 @@ def main() -> None:
     print(
         interpretation_block(
             claim=(
-                f"The synthetic cohort splits into {k} reproducible subtypes and "
-                f"the breast-cancer classifier is diagnostic (AUC {dx['auc']:.2f})."
+                f"Real PBMC3k cells ({sc_source}) split into {k} candidate subtypes "
+                f"and the breast-cancer classifier is diagnostic (AUC {dx['auc']:.2f})."
             ),
             confidence="high",
             limitations_list=[
-                "Subtype ground truth is synthetic; real expression data are noisier.",
+                "Real single-cell subtypes have no ground-truth labels; the evidence "
+                "is cross-method agreement and consensus stability, not an ARI.",
                 "A single train/test split gives one AUC point estimate.",
                 "FDR bounds the expected false-discovery rate, not any single feature.",
             ],
             evidence=(
-                f"consensus stability {stab['stability']:.2f}, "
-                f"AUC CI {lo:.2f}-{hi:.2f}, BH-FDR at alpha=0.05"
+                f"k-means~GMM ARI={ari_km_gmm:.2f}, consensus stability "
+                f"{stab['stability']:.2f}, AUC CI {lo:.2f}-{hi:.2f}, BH-FDR at alpha=0.05"
             ),
         )
     )

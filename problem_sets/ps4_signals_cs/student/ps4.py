@@ -93,6 +93,55 @@ def load_ecg_segment(
     return t, clean, noisy, fs
 
 
+def load_real_ecg_window(
+    channel: int = 0,
+    window_s: float = 10.0,
+    target_snr_db: float = 5.0,
+    seed: int = GLOBAL_SEED,
+) -> dict:
+    """Load a window of one channel of the REAL MIT-BIH ECG (PhysioNet) (provided).
+
+    Calls ``get_dataset("mitbih")`` with ``download=True`` (the default): it
+    fetches one PhysioNet MIT-BIH record via ``wfdb`` and caches it, and offline
+    (or without ``wfdb``) it returns a labeled deterministic ECG-like fallback
+    with the identical payload shape (``signal`` of shape
+    ``n_samples x n_channels``, ``fs``, ``sig_names``). A manageable ``window_s``
+    window of one channel is taken as the clean reference, and zero-mean Gaussian
+    noise calibrated to ``target_snr_db`` is added.
+
+    Returns
+    -------
+    dict
+        ``t``, ``clean``, ``noisy`` (arrays), ``fs``, ``channel_name``,
+        ``source`` (``"real"`` or ``"fallback"``), and ``provenance``.
+    """
+    from ddm4bio.datasets import get_dataset
+
+    ds = get_dataset("mitbih", seed=seed)  # download=True default; caches, falls back offline
+    signal = np.asarray(ds.payload["signal"], dtype=float)  # n_samples x n_channels
+    fs = float(ds.payload["fs"])
+    sig_names = list(ds.payload["sig_names"])
+
+    win_n = min(int(round(window_s * fs)), signal.shape[0])
+    clean = signal[:win_n, channel]
+    t = np.arange(clean.size) / fs
+
+    signal_power = float(np.mean(clean**2))
+    noise_sigma = np.sqrt(signal_power / 10 ** (target_snr_db / 10))
+    rng = np.random.default_rng(seed)
+    noisy = clean + noise_sigma * rng.standard_normal(clean.shape)
+
+    return {
+        "t": t,
+        "clean": clean,
+        "noisy": noisy,
+        "fs": fs,
+        "channel_name": sig_names[channel],
+        "source": ds.source,
+        "provenance": ds.provenance,
+    }
+
+
 def load_sparse_field(
     n: int = 128,
     k: int = 12,
@@ -322,14 +371,18 @@ def main() -> None:
     )
     print()
 
-    # --- Part B1: wavelet denoising validated against a known SNR.
-    _te, clean, noisy, fs_ecg = load_ecg_segment()
-    print(qc_signals(noisy, fs=fs_ecg, reference=clean).render())
+    # --- Part B1: time-frequency + wavelet denoising of a REAL MIT-BIH ECG.
+    ecg = load_real_ecg_window()
+    print(f"[B1] ECG source={ecg['source']} channel={ecg['channel_name']!r}")
+    print(f"[B1] provenance: {ecg['provenance']}")
+    print(qc_signals(ecg["noisy"], fs=ecg["fs"], reference=ecg["clean"]).render())
     print()
-    den = denoise_and_score(noisy, clean)
+    # Same STFT validated on the chirp, now on the real (non-stationary) ECG.
+    f_ecg, t_ecg, ecg_power = compute_spectrogram(ecg["clean"], ecg["fs"], nperseg=256)
+    den = denoise_and_score(ecg["noisy"], ecg["clean"])
     print(
-        f"[B1] SNR before={den['snr_before']:.2f} dB after={den['snr_after']:.2f} dB "
-        f"gain={den['snr_gain']:.2f} dB"
+        f"[B1] ECG spectrogram={ecg_power.shape} | SNR before={den['snr_before']:.2f} dB "
+        f"after={den['snr_after']:.2f} dB gain={den['snr_gain']:.2f} dB"
     )
     print()
 
@@ -360,8 +413,8 @@ def main() -> None:
         claim=(
             "On seeded synthetic fixtures, L1 compressed sensing recovers the "
             f"sparse field from about {ratio_txt} of k-space (relative L2 error "
-            "<= 0.05), wavelet thresholding yields a positive SNR gain on the "
-            "ECG-like segment, and incoherent sampling is necessary for recovery."
+            "<= 0.05), wavelet thresholding yields a positive SNR gain on a real "
+            "MIT-BIH ECG window, and incoherent sampling is necessary for recovery."
         ),
         confidence="high",
         limitations_list=[

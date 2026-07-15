@@ -389,11 +389,12 @@ def main() -> None:
     )
 
     # ----- Part B: clinical application (real biomedical data via get_dataset) ----- #
-    # download=False keeps the run offline and deterministic: get_dataset returns
-    # the labeled synthetic fallback with the same (X, y) payload shape as the
-    # real UCI Heart Disease cohort. Set download=True to fetch and cache the
-    # real Cleveland CSV instead; your functions below work the same either way.
-    ds = get_dataset("heart_uci", download=False)
+    # download=True fetches and caches the real UCI Heart Disease (processed
+    # Cleveland) CSV, so this run uses the genuine 303x13 clinical cohort. If the
+    # network or its optional deps are unavailable, get_dataset falls back
+    # gracefully to a labeled synthetic table with the same (X, y) payload shape,
+    # so your functions below work the same either way.
+    ds = get_dataset("heart_uci", download=True)
     print("== Data provenance ==")
     print(f"source:     {ds.source}")
     print(f"provenance: {ds.provenance}")
