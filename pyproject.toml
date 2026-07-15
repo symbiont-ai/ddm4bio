@@ -50,3 +50,23 @@ addopts = "-q"
 markers = [
     "network: test requires live network access to a real dataset source (deselect with '-m \"not network\"')",
 ]
+
+[tool.coverage.run]
+source = ["ddm4bio"]
+# Dataset loaders are dominated by real-source network branches that only run
+# online. Their offline fallbacks ARE unit-tested; their real-fetch paths are
+# covered by the `network`-marked integration tests. Exclude them from the
+# offline coverage gate so it reflects the pure library logic.
+omit = [
+    "*/datasets/medmnist_images.py",
+    "*/datasets/singlecell.py",
+    "*/datasets/neuro.py",
+    "*/datasets/physio.py",
+    "*/datasets/imaging_mri.py",
+    "*/datasets/omics.py",
+    "*/datasets/epi.py",
+    "*/datasets/tabular.py",
+]
+
+[tool.coverage.report]
+exclude_also = ["if __name__ == .__main__.:"]

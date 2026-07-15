@@ -29,3 +29,9 @@ data/cache/*
 
 # defensive: dataset cache must never be committed, wherever CWD resolves it
 **/data/cache/
+
+# coverage data / reports
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
