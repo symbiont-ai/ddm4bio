@@ -1,62 +1,59 @@
-# PS4 Grading Rubric — Signals & Compressed Sensing
+# PS4 Grading Rubric — How Undersampled Can You Go?
 
-Total: **100 points**. The autograder (`tests/test_ps4.py`) establishes the
-performance floor; the remaining credit is for correct method logic, honest
-quality control, and a defensible interpretation. All work must be offline,
-seeded, and reproducible.
+Total: **100 points**. Grading combines the autograder (`tests/test_ps4.py`)
+with a short read of the submitted code and interpretation. All work must run
+offline and deterministically; a submission that only passes because it hard-codes
+expected numbers or disables a check earns no credit for the affected part.
 
-## Method correctness — 30 points
+## Part A — The recovery cliff — 55 points
 
-The Part A primitives are implemented correctly and used honestly.
+- **`measurement_matrix` (10).** Shape `(m, n)` with `m` rows (measurements) and `n`
+  columns (signal length), Gaussian entries scaled by `1/√m`.
+- **`recover` (12).** Forms the measurements `y = matrix @ signal`, calls the
+  provided `compressed_sensing_recon`, and returns a length-`n` reconstruction. On a
+  well-measured signal (`m ≫ k`) the recovery is close to the truth.
+- **`recovery_error` (8).** Relative L2 error `‖recovered − true‖ / ‖true‖`; zero for
+  a perfect recovery, one when the estimate is twice the truth.
+- **`recovery_error_curve` (13).** Averages the recovery error over `n_trials` random
+  measurement matrices per `m` (not a single draw); the curve is high below the
+  sampling limit and low above it. The averaging is what makes the cliff sharp.
+- **`min_measurements_for_recovery` (12).** Returns the *first* `m` (scanning in
+  order) whose averaged error falls below `tol` — the sampling limit — not the `m`
+  of least error, with a sane fallback when none qualify.
 
-- **FFT (6 pts).** `compute_fft` returns the one-sided spectrum with the right
-  frequency bins and single-sided amplitude scaling; a known tone lands in the
-  correct bin.
-- **Spectrogram (6 pts).** `compute_spectrogram` returns `(freqs, times,
-  power)` with power = squared STFT magnitude and shape `(n_freqs, n_times)`.
-- **Wavelet decomposition (6 pts).** `wavelet_decompose` returns the correct
-  multilevel coefficient list and is exactly invertible (periodization).
-- **Sensing operator + CS solve (12 pts).** `fourier_sensing_matrix` has shape
-  `(2·m, n)` and correctly stacks real/imag DFT rows; `cs_reconstruct` performs
-  the L1 recovery via the library wrapper. Full credit requires the CS
-  reconstruction to meet the error threshold on the seeded fixture.
+## Part B — The phase transition — 25 points
 
-## Application execution — 25 points
+- **`phase_transition` (25).** For each sparsity `k`, returns the minimum
+  measurements to recover a `k`-sparse signal, built with an independent seed per
+  `k`. The result is **non-decreasing** in `k` and strictly larger for a dense signal
+  than a very sparse one — a few measurements per nonzero. Correct handling of the
+  per-`k` signal construction and reuse of `min_measurements_for_recovery`.
 
-- **Denoising (10 pts).** `snr_db` and `denoise_and_score` are correct; the
-  ECG-like segment is denoised with a positive, sensible SNR gain.
-- **Accelerated-MRI CS (10 pts).** `mri_undersample_reconstruct` produces both
-  the CS and zero-filled reconstructions with correct relative-L2 errors and
-  metadata.
-- **Error-vs-ratio sweep (5 pts).** `error_vs_sampling_ratio` returns aligned
-  CS/zero-filled error curves across the requested ratios.
+## Quality control — 10 points
 
-## Quality control — 25 points
+- **QC before results (6).** The provided `run_qc` (signal length, nonzero count,
+  and how many candidate `m` are genuinely undersampled with `m < n`) is printed
+  before any cliff or phase-transition result, per the course "QC before results"
+  rule.
+- **Honest use of ground truth (4).** The cliff and phase transition are measured
+  against the known sparse signals; the real ECG is used only to *motivate*
+  compressibility, not to score recovery (which would need a truth it does not have).
 
-- **Known-SNR validation (8 pts).** QC is run *before* results; the denoising
-  gain is validated against the known clean reference and is positive.
-- **CS vs. zero-filled (8 pts).** CS is compared against the zero-filled
-  baseline and clearly beats it at adequate sampling.
-- **Incoherence check (9 pts).** `incoherence_check` demonstrates that CS
-  succeeds under incoherent (random Fourier) sampling and fails under coherent
-  (identity point) sampling at an identical measurement budget.
+## Interpretation & honesty — 5 points
 
-## Interpretation & honesty — 15 points
-
-- **Minimum sampling ratio (5 pts).** A specific minimum ratio for acceptable
-  reconstruction is reported and matches the sweep.
-- **Confidence statement (5 pts).** An explicit confidence level is given and
-  justified by ground-truth error / known-SNR gain, produced through
-  `interpretation_block`.
-- **Named failure modes & honesty (5 pts).** Failure modes (too few
-  measurements, coherent sampling, exact-vs-approximate sparsity) are named; any
-  method substitution is disclosed. Overstated confidence loses credit here.
+- A clear `interpretation_block` with a confidence level backed by the evidence
+  actually generated (a sharp error-vs-measurements cliff, a monotone
+  minimum-measurements-vs-sparsity curve, a real ECG shown to be compressible), plus
+  at least two honest, specific limitations — exact vs. approximate sparsity, a
+  single tolerance/grid, and a fixed L1 regularization. Overclaiming (e.g. "any
+  signal recovers from a handful of samples") is penalized.
 
 ## Reproducibility — 5 points
 
-- Runs offline with no downloads; all randomness is seeded with `GLOBAL_SEED`;
-  repeated runs give identical numbers; the file is ruff-clean (E, F, I) and
-  imports cleanly to the first unimplemented function.
+- Runs top-to-bottom with a fixed seed; imports follow the repository policy (only
+  `numpy` at module top level, heavier libraries inside function bodies); the file is
+  `ruff`-clean under `E`, `F`, `I` at line length 100; and no public function
+  signature was changed.
 
 ---
 
@@ -64,15 +61,11 @@ The Part A primitives are implemented correctly and used honestly.
 
 | Test | Rubric area |
 | --- | --- |
-| `test_compute_fft_recovers_known_tone` | Method: FFT |
-| `test_compute_spectrogram_shapes` | Method: spectrogram |
-| `test_wavelet_decompose_roundtrip` | Method: wavelet |
-| `test_fourier_sensing_matrix_shape` | Method: sensing operator |
-| `test_denoise_snr_gain_is_positive` | Application + QC: denoising |
-| `test_cs_reconstruction_below_threshold_and_beats_zerofilled` | Method/Application/QC: CS |
-| `test_error_vs_sampling_ratio_curve` | Application + Interpretation: min ratio |
-| `test_incoherent_sampling_recovers_coherent_fails` | QC: incoherence |
-| `test_reconstruction_is_deterministic` | Reproducibility |
+| `test_measurement_matrix_shape_and_scale` | Part A: `measurement_matrix` |
+| `test_recover_and_error_on_a_well_measured_signal` | Part A: `recover`, `recovery_error` |
+| `test_recovery_error_curve_falls_as_measurements_grow` | Part A: `recovery_error_curve` |
+| `test_min_measurements_is_the_first_success_and_beats_the_smallest_m` | Part A: `min_measurements_for_recovery` |
+| `test_phase_transition_grows_with_sparsity` | Part B: `phase_transition` |
 
 A passing autograder is necessary but not sufficient: the QC and interpretation
 credit is awarded for honest, well-argued analysis, not merely green tests.

@@ -1,16 +1,24 @@
-"""PS4 student template: signal processing and compressed sensing (Kutz Ch. 14).
+"""PS4: how undersampled can you go? (the compressed-sensing limit).
 
-Fill in every function marked ``# TODO``. The data loaders, the QC calls, and
-the ``main`` driver are already wired for you -- you only implement the method
-logic. Public function names and signatures MUST stay exactly as given; the
-autograder imports this module and checks them.
+Week 4 reconstructs one sparse signal from one set of compressed measurements. This
+problem set asks the question underneath that demo: **how few measurements can you
+get away with?** Compressed sensing does not degrade gracefully -- below a sharp
+threshold recovery fails completely, above it recovery succeeds. You will map that
+limit.
 
-Running ``python ps4.py`` will load data and run QC without error, then stop at
-the first unimplemented function with ``NotImplementedError``. Implement the
-functions top to bottom and rerun.
+- Part A -- **the recovery cliff**: for a fixed sparsity, sweep the number of random
+  measurements and find the sharp transition from failure to success -- the minimum
+  measurements the signal demands.
+- Part B -- **the phase transition**: sweep sparsity too, and watch the minimum
+  measurements grow with it (m* ~ a few per nonzero) -- the boundary that governs
+  every compressed acquisition.
 
-Everything is offline and seeded. numpy is imported at the top; import ``pywt``
-inside ``wavelet_decompose`` only (keep the ddm4bio wrappers doing the rest).
+Fill in every function body marked ``# TODO``. The reconstruction primitive
+(`compressed_sensing_recon`) and the sparse-signal generator (`make_sparse`), the QC
+driver, and `main` are provided -- this problem set is about mapping the limit, not
+re-deriving the L1 solver. The autograder imports these functions by name, so keep
+the signatures exactly as given. Run with ``python ps4.py``; it stops at the first
+unimplemented function.
 """
 
 from __future__ import annotations
@@ -18,415 +26,181 @@ from __future__ import annotations
 import numpy as np
 
 from ddm4bio.config import GLOBAL_SEED, seed_everything
-from ddm4bio.datasets.synthetic import make_sparse_signal
 from ddm4bio.interpret import interpretation_block
-from ddm4bio.methods.signals import (
-    compressed_sensing_recon,  # noqa: F401  (use inside cs_reconstruct)
-    stft,  # noqa: F401  (use inside compute_spectrogram)
-    wavelet_denoise,  # noqa: F401  (use inside denoise_and_score)
-)
-from ddm4bio.methods.validation import reconstruction_error  # noqa: F401  (use for errors)
-from ddm4bio.qc.signals import qc_signals
-
-WAVELET = "db4"
-WAVELET_LEVEL = 4
-
+from ddm4bio.methods.signals import compressed_sensing_recon  # noqa: F401  (use in recover)
 
 # --------------------------------------------------------------------------- #
-# Data loaders (offline synthetic fixtures) -- provided, do not change.
+# Provided: sparse signals + a real ECG (do not edit)                          #
 # --------------------------------------------------------------------------- #
-def load_nonstationary_signal(
-    fs: float = 500.0,
-    duration: float = 6.0,
-) -> tuple[np.ndarray, np.ndarray, float]:
-    """Build a deterministic nonstationary signal (provided).
-
-    A linear chirp (10 -> 80 Hz) with two time-gated tone bursts (40 Hz in
-    [1, 2] s and 120 Hz in [3.5, 4.0] s).
-
-    Returns
-    -------
-    tuple
-        ``(t, x, fs)``.
-    """
-    n = int(round(fs * duration))
-    t = np.arange(n) / fs
-    f0, f1 = 10.0, 80.0
-    chirp = np.sin(2.0 * np.pi * (f0 * t + 0.5 * (f1 - f0) / duration * t**2))
-    gate1 = ((t >= 1.0) & (t < 2.0)).astype(float)
-    gate2 = ((t >= 3.5) & (t < 4.0)).astype(float)
-    x = chirp + 0.8 * gate1 * np.sin(2.0 * np.pi * 40.0 * t)
-    x = x + 0.6 * gate2 * np.sin(2.0 * np.pi * 120.0 * t)
-    return t, x, fs
 
 
-def load_ecg_segment(
-    fs: float = 360.0,
-    duration: float = 4.0,
-    noise: float = 0.35,
-    seed: int = GLOBAL_SEED,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
-    """Load a real MIT-BIH ECG window as a clean reference and add noise (provided).
+def make_sparse(n: int, k: int, seed: int = GLOBAL_SEED) -> np.ndarray:
+    """(provided) A length-``n`` signal with exactly ``k`` nonzero entries."""
+    from ddm4bio.datasets.synthetic import make_sparse_signal
 
-    Uses ``get_dataset("mitbih", download=False)`` so the fixture is fully
-    offline and deterministic (a labeled synthetic ECG-like fallback at
-    fs = 360 Hz is returned when the real PhysioNet record / ``wfdb`` is
-    unavailable, with the same payload shape). The first ``duration`` seconds of
-    channel 0 are the clean reference; zero-mean Gaussian noise of known standard
-    deviation is added to build the noisy copy.
+    return np.asarray(make_sparse_signal(n, k, seed=seed).signal, dtype=float)
 
-    Returns
-    -------
-    tuple
-        ``(t, clean, noisy, fs)``.
+
+def real_ecg_effective_sparsity(n: int = 256, energy: float = 0.95) -> tuple[int, str]:
+    """(provided) How few Fourier coefficients hold ``energy`` of a real ECG segment.
+
+    Real biosignals are compressible -- their energy concentrates in a few
+    coefficients -- which is exactly what makes compressed sensing apply to them.
     """
     from ddm4bio.datasets import get_dataset
 
-    ds = get_dataset("mitbih", download=False, seed=seed)
-    fs = float(ds.payload["fs"])
-    signal = np.asarray(ds.payload["signal"], dtype=float)
-    n = int(round(fs * duration))
-    clean = signal[:n, 0]
-    t = np.arange(clean.size) / fs
-    rng = np.random.default_rng(seed)
-    noisy = clean + noise * rng.standard_normal(clean.size)
-    return t, clean, noisy, fs
+    ds = get_dataset("mitbih", seed=GLOBAL_SEED)
+    segment = np.asarray(ds.payload["signal"])[:n, 0].astype(float)
+    power = np.abs(np.fft.rfft(segment)) ** 2
+    order = np.argsort(power)[::-1]
+    cumulative = np.cumsum(power[order]) / power.sum()
+    n_coeff = int(np.searchsorted(cumulative, energy) + 1)
+    return n_coeff, ds.source
 
 
-def load_real_ecg_window(
-    channel: int = 0,
-    window_s: float = 10.0,
-    target_snr_db: float = 5.0,
-    seed: int = GLOBAL_SEED,
-) -> dict:
-    """Load a window of one channel of the REAL MIT-BIH ECG (PhysioNet) (provided).
+# --------------------------------------------------------------------------- #
+# Part A -- The recovery cliff  (you implement)                                #
+# --------------------------------------------------------------------------- #
 
-    Calls ``get_dataset("mitbih")`` with ``download=True`` (the default): it
-    fetches one PhysioNet MIT-BIH record via ``wfdb`` and caches it, and offline
-    (or without ``wfdb``) it returns a labeled deterministic ECG-like fallback
-    with the identical payload shape (``signal`` of shape
-    ``n_samples x n_channels``, ``fs``, ``sig_names``). A manageable ``window_s``
-    window of one channel is taken as the clean reference, and zero-mean Gaussian
-    noise calibrated to ``target_snr_db`` is added.
 
-    Returns
-    -------
-    dict
-        ``t``, ``clean``, ``noisy`` (arrays), ``fs``, ``channel_name``,
-        ``source`` (``"real"`` or ``"fallback"``), and ``provenance``.
+def measurement_matrix(m: int, n: int, rng: np.random.Generator) -> np.ndarray:
+    """A random Gaussian sensing matrix of shape ``(m, n)``, scaled by ``1/sqrt(m)``."""
+    # TODO: return rng.standard_normal((m, n)) / sqrt(m) -- m rows (measurements),
+    # n columns (signal length), scaled so each measurement has unit-ish energy.
+    raise NotImplementedError("Implement measurement_matrix.")
+
+
+def recover(signal: np.ndarray, matrix: np.ndarray) -> np.ndarray:
+    """Take compressed measurements ``y = matrix @ signal`` and reconstruct the signal.
+
+    Uses the provided `compressed_sensing_recon(y, matrix)` L1 solver.
     """
-    from ddm4bio.datasets import get_dataset
-
-    ds = get_dataset("mitbih", seed=seed)  # download=True default; caches, falls back offline
-    signal = np.asarray(ds.payload["signal"], dtype=float)  # n_samples x n_channels
-    fs = float(ds.payload["fs"])
-    sig_names = list(ds.payload["sig_names"])
-
-    win_n = min(int(round(window_s * fs)), signal.shape[0])
-    clean = signal[:win_n, channel]
-    t = np.arange(clean.size) / fs
-
-    signal_power = float(np.mean(clean**2))
-    noise_sigma = np.sqrt(signal_power / 10 ** (target_snr_db / 10))
-    rng = np.random.default_rng(seed)
-    noisy = clean + noise_sigma * rng.standard_normal(clean.shape)
-
-    return {
-        "t": t,
-        "clean": clean,
-        "noisy": noisy,
-        "fs": fs,
-        "channel_name": sig_names[channel],
-        "source": ds.source,
-        "provenance": ds.provenance,
-    }
+    # TODO: form the measurements y = matrix @ signal, call
+    # compressed_sensing_recon(y, matrix), and return the reconstruction as a
+    # length-len(signal) 1-D array.
+    raise NotImplementedError("Implement recover.")
 
 
-def load_sparse_field(
-    n: int = 128,
-    k: int = 12,
-    seed: int = GLOBAL_SEED,
+def recovery_error(recovered: np.ndarray, true_signal: np.ndarray) -> float:
+    """Relative L2 error ``||recovered - true|| / ||true||``."""
+    # TODO: return the L2 norm of (recovered - true_signal) divided by the L2 norm
+    # of true_signal (guard a zero denominator with a small epsilon).
+    raise NotImplementedError("Implement recovery_error.")
+
+
+def recovery_error_curve(
+    signal: np.ndarray, m_values: list[int], seed: int = GLOBAL_SEED, n_trials: int = 5
 ) -> np.ndarray:
-    """Return a k-sparse 1-D field (isolated point sources) as ground truth (provided)."""
-    return make_sparse_signal(n, k, seed=seed).signal
+    """Recovery error vs. number of measurements ``m``, averaged over random matrices.
+
+    For each ``m``: draw ``n_trials`` measurement matrices, recover from each, and
+    average the relative error. Because which random matrix you draw matters, the
+    average over trials is what makes the cliff sharp: the curve stays high (failure)
+    below the sampling limit, then drops once ``m`` is large enough for the sparsity.
+    """
+    # TODO: rng = np.random.default_rng(seed). For each m in m_values, average
+    # recovery_error(recover(signal, measurement_matrix(m, len(signal), rng)), signal)
+    # over n_trials draws. Return the per-m mean errors as an array.
+    raise NotImplementedError("Implement recovery_error_curve.")
+
+
+def min_measurements_for_recovery(
+    signal: np.ndarray, m_values: list[int], tol: float = 0.3, seed: int = GLOBAL_SEED
+) -> int:
+    """Smallest ``m`` (scanning ``m_values`` in order) whose recovery error is below ``tol``.
+
+    This is the sampling limit -- the fewest measurements the signal demands. Return
+    the largest candidate if none succeed.
+    """
+    # TODO: compute recovery_error_curve(signal, m_values, seed=seed); return the
+    # first m_values entry whose error < tol, or the last candidate if none do.
+    raise NotImplementedError("Implement min_measurements_for_recovery.")
 
 
 # --------------------------------------------------------------------------- #
-# Part A -- Method
+# Part B -- The phase transition  (you implement)                              #
 # --------------------------------------------------------------------------- #
-def compute_fft(x: np.ndarray, fs: float) -> tuple[np.ndarray, np.ndarray]:
-    """One-sided amplitude spectrum of a real signal.
-
-    Returns
-    -------
-    tuple
-        ``(freqs, magnitude)`` -- nonnegative frequency bins (Hz) and the
-        single-sided amplitude spectrum.
-    """
-    # TODO: Use np.fft.rfft to transform x and np.fft.rfftfreq for the bins.
-    # Return the magnitude scaled to a single-sided amplitude (factor 2 / n).
-    raise NotImplementedError
 
 
-def compute_spectrogram(
-    x: np.ndarray,
-    fs: float,
-    nperseg: int = 128,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Short-time Fourier power spectrogram via the ddm4bio STFT wrapper.
-
-    Returns
-    -------
-    tuple
-        ``(freqs, times, power)`` with ``power = |Zxx|**2`` of shape
-        ``(freqs.size, times.size)``.
-    """
-    # TODO: Call stft(x, fs=fs, nperseg=nperseg) and square the magnitude of
-    # the complex STFT coefficients to get power. Return (freqs, times, power).
-    raise NotImplementedError
-
-
-def wavelet_decompose(
-    x: np.ndarray,
-    wavelet: str = WAVELET,
-    level: int = WAVELET_LEVEL,
-) -> list[np.ndarray]:
-    """Multilevel discrete wavelet decomposition.
-
-    Return the PyWavelets coefficient list ``[cA_level, cD_level, ..., cD_1]``
-    using ``mode="periodization"`` so the coefficient count matches ``len(x)``.
-    """
-    import pywt  # noqa: F401  (use pywt.wavedec below)
-
-    # TODO: Return pywt.wavedec(x, wavelet, level=level, mode="periodization").
-    raise NotImplementedError
-
-
-def fourier_sensing_matrix(n: int, kept_indices: np.ndarray) -> np.ndarray:
-    """Real-valued k-space sensing matrix for the retained frequencies.
-
-    Take the rows of the ``n x n`` DFT matrix at ``kept_indices`` and stack their
-    real and imaginary parts vertically.
-
-    Returns
-    -------
-    np.ndarray, shape ``(2 * len(kept_indices), n)``.
-    """
-    # TODO: Build the DFT matrix (e.g. np.fft.fft(np.eye(n), axis=0)),
-    # select the kept rows, and vstack [rows.real, rows.imag].
-    raise NotImplementedError
-
-
-def cs_reconstruct(
-    y: np.ndarray,
-    phi: np.ndarray,
-    alpha: float = 1e-3,
-    seed: int = 0,
+def phase_transition(
+    n: int, sparsities: list[int], m_values: list[int], tol: float = 0.3, seed: int = GLOBAL_SEED
 ) -> np.ndarray:
-    """L1 (Lasso) compressed-sensing reconstruction via the ddm4bio wrapper."""
-    # TODO: Return compressed_sensing_recon(y, phi, alpha=alpha, seed=seed).
-    raise NotImplementedError
+    """Minimum measurements to recover, as a function of sparsity.
 
-
-# --------------------------------------------------------------------------- #
-# Part B -- Application
-# --------------------------------------------------------------------------- #
-def snr_db(reference: np.ndarray, estimate: np.ndarray) -> float:
-    """Signal-to-noise ratio in dB of ``estimate`` against a clean ``reference``."""
-    # TODO: Compute 10 * log10( sum(ref**2) / sum((ref - est)**2) ).
-    # Guard against a zero noise power (return math.inf / float("inf")).
-    raise NotImplementedError
-
-
-def denoise_and_score(
-    noisy: np.ndarray,
-    clean: np.ndarray,
-    wavelet: str = WAVELET,
-) -> dict:
-    """Wavelet-denoise ``noisy`` and score the SNR gain against ``clean``.
-
-    Returns
-    -------
-    dict
-        ``denoised`` plus ``snr_before``, ``snr_after``, ``snr_gain`` (dB).
+    For each ``k`` in ``sparsities``: build a ``k``-sparse length-``n`` signal and find
+    its `min_measurements_for_recovery`. Return one ``m*`` per sparsity; ``m*`` grows
+    with ``k`` (a few measurements per nonzero).
     """
-    # TODO: Call wavelet_denoise(noisy, wavelet=wavelet); score snr_db before
-    # and after; return the dict with the denoised signal and the three SNRs.
-    raise NotImplementedError
-
-
-def mri_undersample_reconstruct(
-    field: np.ndarray,
-    ratio: float,
-    seed: int = GLOBAL_SEED,
-    alpha: float = 1e-3,
-) -> dict:
-    """Simulate accelerated MRI: undersample k-space and reconstruct two ways.
-
-    Retain a random fraction ``ratio`` of Fourier coefficients of ``field``.
-    Reconstruct with (1) L1 compressed sensing and (2) zero-filling the missing
-    k-space then inverse-transforming.
-
-    Returns
-    -------
-    dict
-        ``x_cs``, ``x_zf``, ``cs_error``, ``zf_error`` (relative L2), ``kept``,
-        ``n_meas``, ``ratio``.
-    """
-    # TODO: n = field.size; rng = np.random.default_rng(seed);
-    #   n_meas = max(1, int(round(ratio * n)));
-    #   kept = np.sort(rng.choice(n, size=n_meas, replace=False)).
-    # TODO: spectrum = np.fft.fft(field);
-    #   phi = fourier_sensing_matrix(n, kept);
-    #   y = np.concatenate([spectrum[kept].real, spectrum[kept].imag]);
-    #   x_cs = cs_reconstruct(y, phi, alpha=alpha, seed=0).
-    # TODO: Zero-filled: put spectrum[kept] into a length-n complex zero array
-    #   and take the real part of np.fft.ifft(...).
-    # TODO: Return the dict documented above using
-    #   reconstruction_error(field, ..., kind="rel_l2") for the errors.
-    raise NotImplementedError
-
-
-def error_vs_sampling_ratio(
-    field: np.ndarray,
-    ratios: np.ndarray,
-    seed: int = GLOBAL_SEED,
-    alpha: float = 1e-3,
-) -> dict:
-    """Sweep the sampling ratio and record CS and zero-filled errors.
-
-    Returns
-    -------
-    dict
-        ``ratios`` and matching ``cs_errors`` / ``zf_errors`` (relative L2).
-    """
-    # TODO: For each ratio, call mri_undersample_reconstruct(field, ratio,
-    # seed=seed, alpha=alpha) and collect cs_error / zf_error into arrays.
-    raise NotImplementedError
+    # TODO: for each k, build make_sparse(n, k, seed=seed + k) and take its
+    # min_measurements_for_recovery(..., tol=tol, seed=seed). Return the m* array.
+    raise NotImplementedError("Implement phase_transition.")
 
 
 # --------------------------------------------------------------------------- #
-# Part C -- Quality control
+# Provided: QC + driver                                                        #
 # --------------------------------------------------------------------------- #
-def incoherence_check(
-    field: np.ndarray,
-    ratio: float,
-    seed: int = GLOBAL_SEED,
-    alpha: float = 1e-3,
-) -> dict:
-    """Contrast incoherent vs. coherent sampling at a fixed measurement budget.
-
-    Use the same number of measurements two ways: (1) random Fourier (k-space)
-    rows -- incoherent with the spike basis -- and (2) direct spatial point
-    samples (rows of the identity) -- maximally coherent. CS should succeed in
-    the first case and fail in the second.
-
-    Returns
-    -------
-    dict
-        ``cs_error_incoherent``, ``cs_error_coherent`` (relative L2), ``kept``.
-    """
-    # TODO: n = field.size; rng = np.random.default_rng(seed);
-    #   n_meas = max(1, int(round(ratio * n)));
-    #   kept = np.sort(rng.choice(n, size=n_meas, replace=False)).
-    # TODO: Incoherent case -- reconstruct from random Fourier rows using
-    #   fourier_sensing_matrix + cs_reconstruct (as in mri_undersample_reconstruct).
-    # TODO: Coherent case -- phi = np.eye(n)[kept, :], y = field[kept],
-    #   reconstruct with cs_reconstruct.
-    # TODO: Return the two relative-L2 errors and the kept index set.
-    raise NotImplementedError
 
 
-def minimum_acceptable_ratio(sweep: dict, tol: float = 0.05) -> float | None:
-    """Smallest swept ratio whose CS error is at or below ``tol`` (provided).
-
-    Returns ``None`` when no swept ratio meets the tolerance.
-    """
-    ratios = np.asarray(sweep["ratios"], dtype=float)
-    cs_errors = np.asarray(sweep["cs_errors"], dtype=float)
-    ok = np.flatnonzero(cs_errors <= tol)
-    if ok.size == 0:
-        return None
-    return float(ratios[ok].min())
+def run_qc(signal: np.ndarray, m_values: list[int]) -> None:
+    """Print a QC block before any results (provided)."""
+    n = len(signal)
+    k = int(np.count_nonzero(signal))
+    undersampled = [m for m in m_values if m < n]
+    print(f"QC: length-{n} signal with {k} nonzeros (sparsity {k / n:.1%}).")
+    print(f"    {len(undersampled)}/{len(m_values)} candidate measurement counts are "
+          f"undersampled (m < n) -- the compressed-sensing regime.")
 
 
-# --------------------------------------------------------------------------- #
-# Driver: QC before results, then the honest interpretation block (provided).
-# --------------------------------------------------------------------------- #
 def main() -> None:
-    """Run the full PS4 analysis with QC gates and an interpretation block."""
+    """Map the compressed-sensing sampling limit; motivate it on a real ECG."""
     seed_everything()
+    n = 128
+    m_values = [8, 12, 16, 20, 24, 28, 32, 40, 48, 56, 64, 80]
 
-    # --- Part A: time-frequency + wavelet decomposition of a nonstationary signal.
-    _t, x, fs = load_nonstationary_signal()
-    print(qc_signals(x, fs=fs).render())
-    print()
-    freqs, magnitude = compute_fft(x, fs)
-    f_spec, t_spec, power = compute_spectrogram(x, fs)
-    coeffs = wavelet_decompose(x)
-    dominant = float(freqs[int(np.argmax(magnitude))])
-    print(
-        f"[A] FFT bins={freqs.size} dominant~{dominant:.1f} Hz | "
-        f"spectrogram={power.shape} | wavelet bands={len(coeffs)}"
-    )
-    print()
+    n_coeff, source = real_ecg_effective_sparsity()
+    print(f"Real ECG (MIT-BIH via get_dataset -> source={source}): "
+          f"{n_coeff} Fourier coefficients hold 95% of a 256-sample segment's energy")
+    print("  -> real biosignals are compressible, which is what lets compressed sensing apply.\n")
 
-    # --- Part B1: time-frequency + wavelet denoising of a REAL MIT-BIH ECG.
-    ecg = load_real_ecg_window()
-    print(f"[B1] ECG source={ecg['source']} channel={ecg['channel_name']!r}")
-    print(f"[B1] provenance: {ecg['provenance']}")
-    print(qc_signals(ecg["noisy"], fs=ecg["fs"], reference=ecg["clean"]).render())
-    print()
-    # Same STFT validated on the chirp, now on the real (non-stationary) ECG.
-    f_ecg, t_ecg, ecg_power = compute_spectrogram(ecg["clean"], ecg["fs"], nperseg=256)
-    den = denoise_and_score(ecg["noisy"], ecg["clean"])
-    print(
-        f"[B1] ECG spectrogram={ecg_power.shape} | SNR before={den['snr_before']:.2f} dB "
-        f"after={den['snr_after']:.2f} dB gain={den['snr_gain']:.2f} dB"
-    )
-    print()
+    print("== Quality control (before results) ==")
+    signal = make_sparse(n, k=8)
+    run_qc(signal, m_values)
 
-    # --- Part B2: accelerated MRI CS reconstruction and error vs. sampling ratio.
-    field = load_sparse_field()
-    print(qc_signals(field, fs=1.0).render())
-    print()
-    ratios = [0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5]
-    sweep = error_vs_sampling_ratio(field, ratios)
-    for ratio, cs_err, zf_err in zip(
-        sweep["ratios"], sweep["cs_errors"], sweep["zf_errors"], strict=True
-    ):
-        print(f"[B2] ratio={ratio:.2f} CS_err={cs_err:.4f} zero-filled_err={zf_err:.4f}")
-    print()
+    print("\n== Part A: the recovery cliff (sparsity k = 8) ==")
+    curve = recovery_error_curve(signal, m_values)
+    for m, e in zip(m_values, curve):
+        print(f"    m={m:>3d}  rel-error={e:.3f}{'  <-- recovers' if e < 0.3 else ''}")
+    m_star = min_measurements_for_recovery(signal, m_values)
+    print(f"  minimum measurements to recover = {m_star}  ({m_star / 8:.1f} per nonzero)")
 
-    # --- Part C: incoherence check.
-    inc = incoherence_check(field, 0.35)
-    print(
-        f"[C] incoherent CS_err={inc['cs_error_incoherent']:.4f} "
-        f"coherent CS_err={inc['cs_error_coherent']:.4f}"
-    )
-    print()
+    print("\n== Part B: the phase transition (m* vs sparsity) ==")
+    sparsities = [2, 4, 8, 12, 16]
+    m_star_curve = phase_transition(n, sparsities, m_values)
+    for k, ms in zip(sparsities, m_star_curve):
+        print(f"    k={k:>2d}  ->  m* = {ms:>2d}   ({ms / k:.1f} measurements per nonzero)")
+    grows = bool(np.all(np.diff(m_star_curve) >= 0))
+    print(f"  m* is non-decreasing in sparsity: {grows}")
 
-    # --- Part D: interpretation with explicit confidence + limitations.
-    min_ratio = minimum_acceptable_ratio(sweep, tol=0.05)
-    ratio_txt = "n/a" if min_ratio is None else f"{min_ratio:.2f}"
+    print("\n== Interpretation ==")
     block = interpretation_block(
         claim=(
-            "On seeded synthetic fixtures, L1 compressed sensing recovers the "
-            f"sparse field from about {ratio_txt} of k-space (relative L2 error "
-            "<= 0.05), wavelet thresholding yields a positive SNR gain on a real "
-            "MIT-BIH ECG window, and incoherent sampling is necessary for recovery."
+            f"Compressed sensing has a sharp sampling limit: a {8}-sparse length-{n} signal is "
+            f"unrecoverable below {m_star} random measurements and recovers cleanly above it, and "
+            f"that limit grows with sparsity (from {m_star_curve[0]} to {m_star_curve[-1]} "
+            f"measurements as k goes {sparsities[0]} to {sparsities[-1]})."
         ),
         confidence="high",
         limitations_list=[
-            "Synthetic field is exactly sparse; real ECG/MRI data is only "
-            "approximately sparse in these bases.",
-            "Denoising is scored on a single noise realization at one noise level.",
-            "The Lasso regularization alpha is fixed, not cross-validated.",
-            "A 1-D field is used as a proxy for a full 2-D MRI acquisition.",
+            "Signals are exactly k-sparse in the canonical basis; real signals are only "
+            "approximately sparse (in a wavelet/Fourier basis), which softens the cliff.",
+            "The transition is mapped at one tolerance and one measurement grid; the exact m* "
+            "shifts with both.",
+            "The L1 solver uses a fixed regularization, so recovery above the cliff is good but "
+            "not machine-exact.",
         ],
         evidence=(
-            "ground-truth relative-L2 reconstruction error and known-SNR gain "
-            "measured on deterministic seeded fixtures"
+            "a sharp error-vs-measurements cliff, a monotone minimum-measurements-vs-sparsity "
+            "curve, and a real ECG shown to be compressible"
         ),
     )
     print(block)
