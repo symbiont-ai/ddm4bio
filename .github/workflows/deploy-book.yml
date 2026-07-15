@@ -48,6 +48,12 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          # Auto-enable Pages (GitHub Actions source) on first run, so no manual
+          # Settings toggle is needed. Requires the plan to permit Pages: a
+          # PRIVATE repo needs GitHub Pro/Team/Enterprise; on a free plan the repo
+          # must be Public for this to succeed.
+          enablement: true
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
