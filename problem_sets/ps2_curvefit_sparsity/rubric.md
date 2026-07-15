@@ -1,67 +1,55 @@
-# PS2 Rubric — Curve Fitting, Regularized Differentiation, Sparsity
+# PS2 Grading Rubric — Letting the Data Choose the Model
 
-Total: **100 points**. The autograder checks interfaces and ground-truth
-thresholds; the remaining judgment is applied by the grader against the criteria
-below. Every deterministic, seeded test must pass against your submission.
+Total: **100 points**. Grading combines the autograder (`tests/test_ps2.py`)
+with a short read of the submitted code and interpretation. All work must run
+offline and deterministically; a submission that only passes because it hard-codes
+expected numbers, disables a check, or scores a fold on data it was fit on earns no
+credit for the affected part.
 
-## Method correctness — 30 points
+## Part A — Model-complexity selection — 30 points
 
-The three estimators are implemented correctly on top of the `ddm4bio` library.
+- **`poly_cv_mse` (16).** Truly out-of-sample: for each fold, fits the polynomial
+  on the complement and scores the held-out points; averages the MSE. A degree far
+  above the true one generalizes *worse*, not better.
+- **`select_degree` (14).** Returns the whole CV-MSE curve and the degree that
+  minimizes it (the true argmax), and recovers the true complexity (± one degree)
+  without chasing an overfit high degree.
 
-- **12 pts** — `fit_dose_response` fits the Hill model on flattened replicates
-  and recovers the true EC50 (within 10%) and Hill coefficient (within 0.3);
-  `r_squared` and the residual arrays are computed correctly.
-- **9 pts** — `compare_derivative_methods` produces both derivative estimates
-  and correct L2 errors, and the regularized error is strictly smaller than the
-  finite-difference error on the noisy signal.
-- **9 pts** — `sparse_biomarkers` / `stability_selection` apply the Lasso
-  correctly (standardizing when asked) and recover the exact support of a
-  synthetic sparse model.
+## Part B — Sparse feature selection — 40 points
 
-## Application execution — 25 points
+- **`lasso_cv_mse` (12).** Out-of-sample MSE of a Lasso at a given penalty (fit with
+  the provided `lasso_fit`, predict `X @ coef + intercept`); an over-large penalty
+  generalizes worse.
+- **`select_alpha` (10).** Returns the CV-MSE curve and the penalty that minimizes
+  it; the strongest penalty is not chosen (it underfits).
+- **`selected_features` (8).** Correct nonzero-coefficient indices; fewer features
+  as the penalty grows, and the true drivers are (nearly) all recovered at a modest
+  penalty.
+- **`support_scores` (10).** Correct precision and recall against a known driver set
+  (verified on hand-checked inputs), with empty sets handled without crashing.
 
-The methods are run on the assigned data and produce the required quantities.
+## Quality control — 15 points
 
-- **13 pts** — `bootstrap_ec50` resamples replicates per dose, refits, and
-  returns sensible point estimates and percentile confidence intervals; the
-  EC50 interval brackets the known truth.
-- **12 pts** — stability selection runs on the breast-cancer panel and yields a
-  short, plausible stable set with a valid per-feature frequency vector.
+- **Out-of-sample discipline (9).** The folds are disjoint and complete (each row
+  held out exactly once); no CV score is computed on data the model was fit on. QC
+  is printed *before* any result, per the course "QC before results" rule.
+- **Honest data (6).** The synthetic recovery is scored against known truth; the
+  real WDBC panel is read qualitatively (no ground-truth driver set), and the
+  dataset is loaded through the course data layer.
 
-## Quality control — 25 points
+## Interpretation & honesty — 10 points
 
-QC is first-class and precedes the results.
-
-- **9 pts** — goodness of fit reported honestly: `r_squared` **and** residual
-  structure (`residual_structure` correctly computes lag-1 autocorrelation and
-  sign-run count), with structured residuals flagged rather than hidden.
-- **9 pts** — selection stability reported as the QC metric for Part B, naming
-  which features clear the threshold and which barely miss it.
-- **7 pts** — the tabular QC report (`qc_tabular`) is produced and read before
-  the selection results, not bolted on afterward.
-
-## Interpretation & honesty — 15 points
-
-- **7 pts** — a complete interpretation block via `interpretation_block`: EC50
-  with its confidence interval, the stable biomarkers, and named limitations.
-- **8 pts** — the confidence level matches the evidence. Claiming `high` on a
-  synthetic assay with a replicate-only bootstrap and no held-out biomarker test
-  set is penalized; naming those constraints and choosing `moderate` or `low` is
-  rewarded.
+- A clear `interpretation_block` with a confidence level backed by the evidence
+  actually generated (the U-shaped CV curves, disjoint-and-complete folds,
+  precision/recall vs a known support).
+- At least two honest, specific limitations — especially that CV-tuned Lasso
+  **over-selects** (high recall, lower precision), that a single CV estimate depends
+  on the fold seed, and that the real panel has no ground truth to score against.
+  Overclaiming is penalized; calibrated honesty is rewarded.
 
 ## Reproducibility — 5 points
 
-- **5 pts** — seeded and deterministic (same seed → identical output), offline
-  only (no network, no downloads), and `ruff`-clean under `E, F, I` at line
-  length 100.
-
----
-
-### Automatic caps
-
-- Any network access, download, or non-deterministic output caps the score at
-  **60/100** regardless of correctness.
-- A missing or non-functional QC section (Part C) caps the score at **75/100** —
-  QC is a required, graded deliverable.
-- An interpretation block whose stated confidence materially overreaches the
-  evidence caps Interpretation & honesty at **5/15**.
+- Runs top-to-bottom with a fixed seed; imports follow the repository policy (only
+  `numpy` at module top level, heavier libraries inside function bodies); the file
+  is `ruff`-clean under `E`, `F`, `I` at line length 100; and no public function
+  signature was changed.

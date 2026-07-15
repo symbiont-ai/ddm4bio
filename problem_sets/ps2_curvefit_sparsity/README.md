@@ -1,129 +1,87 @@
-# PS2 — Curve Fitting, Regularized Differentiation, and Sparsity
+# PS2 — Letting the Data Choose the Model: Cross-Validated Selection
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/symbiont-ai/ddm4bio/blob/main/problem_sets/ps2_curvefit_sparsity/ps2_colab.ipynb)
 
 **Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
 
 **Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 4
-(least-squares and nonlinear curve fitting, regression, the coefficient of
-determination) and Chapter 5 (sparsity, the Lasso / L1 regularization, and
-compressed sensing). This problem set turns three ideas from those chapters into
-one honest analysis of pharmacology and biomarker data.
+(least squares & curve fitting) and Chapter 5 (sparsity and the Lasso).
 
-You will fit a sigmoidal dose-response curve and defend the number you extract
-from it, watch regularization tame a differentiation problem that naive
-differencing wrecks, and use L1 penalties to pull a short, *stable* list of
-biomarkers out of a wide feature panel. Throughout, the emphasis is not on
-getting a point estimate but on knowing how much to trust it.
+Week 2 fit a model at a complexity *you* chose — a curve of a given form, a Lasso
+at a given penalty. This problem set asks the harder question you face when you do
+**not** know the truth: how complex a model does the data actually support? The
+answer is **cross-validation** — score each candidate on data it was not fit on,
+and let held-out error choose. You never look at the ground truth to decide.
 
-You implement your method logic in `student/ps2.py`. The library calls, the
-offline data loaders, and the QC/interpretation plumbing are already wired; you
-fill only the function bodies marked `# TODO`. The public function signatures are
-fixed — the autograder imports them by name.
+The model-fitting primitives (`np.polyfit` / `np.polyval`, the provided `lasso_fit`)
+and the fold splitter (`kfold_indices`) are **provided** — this problem set is
+about *selecting* with them, not re-deriving them. Fill in the functions marked
+`# TODO` in `student/ps2.py`. The autograder checks each on its own seeded
+fixtures, so keep the signatures exactly as given.
 
-## Data (everything offline)
+## Data
 
-No downloads, no network, no credentials.
+- **Synthetic** — `make_response_curve` (a noisy polynomial of known degree) and
+  `make_sparse_regression` (a linear model with a known set of nonzero drivers).
+  Known ground truth is what lets us check that cross-validation chose correctly.
+- **Real** — `load_biomarkers` returns the offline Breast-Cancer-Wisconsin panel
+  (569 samples × 30 measurements), used to read off a biomarker panel that
+  generalizes. Seed everything through `ddm4bio.seed_everything()` (called in
+  `main`).
 
-- **Dose-response assay** — generated locally by `simulate_dose_response`, which
-  evaluates a known Hill curve (`ddm4bio.methods.fitting.hill`) and adds
-  independent Gaussian replicate noise. Because the true EC50 and Hill
-  coefficient are known, you can measure how well you recovered them. (This stays
-  synthetic on purpose: it is the ground-truth recovery check.)
-- **Differentiation signal** — a noisy sine on a uniform grid, whose analytic
-  derivative (a cosine) is known exactly.
-- **Biomarker panel** — the Breast Cancer Wisconsin (Diagnostic) dataset (569
-  samples, 30 features), loaded through the course data layer as
-  `get_dataset("breast_wisconsin", download=False)` and wrapped as a labelled
-  DataFrame by `load_breast_cancer_frame` so the tabular QC report can check
-  class balance. With `download=False` this serves the scikit-learn *bundled*
-  WDBC data deterministically and offline (a synthetic fallback is used only if
-  scikit-learn is missing). The related Week 2 lesson also fits a Hill curve to a
-  real drug/cell dose-response series from `get_dataset("gdsc")`.
+## Part A — Choose model complexity by cross-validation
 
-All randomness is seeded from `ddm4bio.config.GLOBAL_SEED`; identical inputs must
-give identical outputs.
+Fit polynomials of growing degree to a noisy response curve. Too low a degree
+underfits; too high overfits — so the cross-validated MSE is U-shaped and its
+minimum is the complexity the data supports.
 
----
+Implement:
 
-## Part A — Method
+- `poly_cv_mse(x, y, degree, folds)` — mean out-of-sample MSE of a degree-`degree`
+  polynomial across the folds (fit on the complement, predict the held-out fold).
+- `select_degree(x, y, candidate_degrees, folds)` — the degree minimizing
+  cross-validated MSE, and the whole curve.
 
-Build the three estimators, each on top of the maintained `ddm4bio.methods.fitting`
-routines.
+## Part B — Choose a sparse feature set by cross-validation
 
-1. **Nonlinear dose-response fit.** Implement `fit_dose_response(dose, response,
-   seed)`. Accept either a 1-D response vector or a 2-D
-   `(n_replicates, n_doses)` array; flatten replicates against their doses and
-   fit the four-parameter Hill model with `fit_hill`. Extend the returned dict
-   with the coefficient of determination `r_squared`, the flattened `residuals`,
-   and the per-dose `mean_residuals` (ordered by dose) used by the QC check.
+Cross-validate the Lasso penalty to pick the feature set that generalizes.
 
-2. **Regularized vs. finite-difference differentiation.** Implement
-   `compare_derivative_methods(y, dx, deriv_true, lam)`. Estimate the derivative
-   of the noisy signal two ways — Tikhonov-regularized differentiation
-   (`regularized_derivative`) and a plain `np.gradient` finite difference — and
-   score each by its L2 distance to the known analytic derivative. A finite
-   difference amplifies high-frequency noise; regularization should not.
+Implement:
 
-3. **L1 sparse selection.** Implement `sparse_biomarkers(x, y, alpha,
-   standardize, seed)`, a thin wrapper over `lasso_select` that optionally
-   z-scores the columns first (essential when features span very different
-   scales). The L1 penalty drives uninformative coefficients to exactly zero.
+- `lasso_cv_mse(x, y, alpha, folds)` — mean out-of-sample MSE of a Lasso at penalty
+  `alpha` (use the provided `lasso_fit`).
+- `select_alpha(x, y, candidate_alphas, folds)` — the penalty minimizing
+  cross-validated MSE, and the curve.
+- `selected_features(x, y, alpha)` — indices of the nonzero-coefficient features.
+- `support_scores(selected, true_support)` — precision and recall of a selected set
+  against the known drivers.
 
-## Part B — Application
+On the synthetic data you measure recovery; on real WDBC you read off a panel
+(there is no ground-truth driver set to score, so read it qualitatively).
 
-1. **EC50 and Hill coefficient with uncertainty.** Run `fit_dose_response` on the
-   synthetic assay, then implement `bootstrap_ec50(dose, response, n_boot, ci,
-   seed)`: resample the replicates at each dose with replacement, refit each
-   resampled mean, and build percentile confidence intervals for the EC50 and
-   the Hill coefficient. This propagates replicate measurement noise into the
-   parameters you report.
+## Quality control & interpretation (required)
 
-2. **Stable biomarker selection.** Run `sparse_biomarkers` on the breast-cancer
-   panel, then implement `stability_selection(x, y, n_boot, alpha, subsample,
-   threshold, standardize, seed)`: repeatedly fit the Lasso on random row
-   subsamples and record how often each feature is selected. A single Lasso fit
-   is notoriously unstable to resampling; the selection *frequency* is the honest
-   quantity.
+The provided `run_qc` verifies the folds are **disjoint and complete** (each row is
+held out exactly once, so every CV score is out-of-sample), printed before any
+result. The provided `main` closes with a `ddm4bio.interpret.interpretation_block`:
+state how much cross-validation supports the claim, at an honest confidence level,
+and name the real limitations — CV-tuned Lasso recovers the true drivers but
+**over-selects** (high recall, lower precision), each CV score is a single held-out
+estimate, and the real panel has no ground truth to score against.
 
-## Part C — Quality control (required)
+## Files
 
-QC is graded and comes **before** the headline results (the course golden rule).
-
-1. **Goodness of fit.** Report `r_squared`, and implement `residual_structure`
-   to summarize the dose-ordered residuals: their lag-1 autocorrelation and the
-   number of same-sign runs. A high `r_squared` with structured (autocorrelated,
-   few-run) residuals signals a misspecified model, not a good fit — flag it.
-
-2. **Selection stability.** Treat the per-feature selection frequency from
-   `stability_selection` as the QC metric for Part B: report which features
-   clear the stability threshold and note how many barely miss it.
-
-3. **Tabular QC.** The driver prints `ddm4bio.qc.qc_tabular` on the breast-cancer
-   frame (missingness, duplicates, constant columns, class balance, IQR
-   outliers) before any selection result. Read it; do not just print it.
-
-## Part D — Interpretation & confidence
-
-Close with an interpretation block emitted through
-`ddm4bio.interpret.interpretation_block`. State (i) the EC50 **with its
-confidence interval**, (ii) which biomarkers are stable, (iii) a single honest
-confidence level (`low` / `moderate` / `high`) backed by named evidence, and
-(iv) a named limitations list. The confidence level must reflect the evidence
-you actually have — a synthetic assay, a replicate-only bootstrap, a scale- and
-`alpha`-sensitive selector, and no held-out biomarker test set all cap how far
-you can go. Overstating confidence is the failure mode this part exists to catch.
-
----
+- `student/ps2.py` — your working file; fill in every `# TODO`.
+- `rubric.md` — how this problem set is graded.
+- `ps2_colab.ipynb` — one-click Google Colab launcher (badge at the top).
+- The reference solution and the autograder are provided through the course and
+  run automatically by GitHub Classroom.
 
 ## Running
 
 ```bash
-python student/ps2.py                 # import cleanly; stop at the first TODO
+python student/ps2.py          # runs until the first unimplemented function
 ```
 
-You can also work in the browser: click the **Open in Colab** badge at the top —
-no local setup required. The autograder runs automatically when you push to
-GitHub Classroom, importing your `student/ps2.py`; a reference solution is
-provided through the course. Keep your code `ruff`-clean under `E, F, I` (line
-length 100), deterministic, and offline.
+To work in the browser instead, click the Colab badge at the top of this file.
+The autograder runs automatically when you push to GitHub Classroom.

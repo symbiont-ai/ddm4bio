@@ -1,343 +1,242 @@
-"""PS2 student template: curve fitting, regularized differentiation, sparsity.
+"""Student template for PS2: letting the data choose the model.
 
-Fill in each function body where you see ``# TODO``. The imports, the offline
-data loaders, and the QC/interpretation plumbing are already wired for you, so
-you only implement the method logic. Every function must keep the signature
-given here -- the autograder imports these names directly.
+Week 2 fit a model at a complexity you picked. Here you face the real question:
+when you do NOT know the truth, how complex a model does the data support? The
+answer is **cross-validation** — score each candidate on data it was not fit on,
+and let held-out error choose.
 
-Reading: Kutz, "Data-Driven Modeling & Scientific Computation," Ch. 4
-(curve fitting and regression) and Ch. 5 (sparsity and compressed sensing).
+- Part A — **model-complexity selection**: fit polynomials of growing degree to a
+  noisy response curve and pick the degree that generalizes (cross-validated error
+  is U-shaped: underfit high, overfit high).
+- Part B — **sparse feature selection**: cross-validate the Lasso penalty to pick
+  the biomarker set that generalizes. On synthetic data with a known driver set you
+  measure recovery; on real breast-cytology data you read off a panel.
 
-Run this file (``python ps2.py``) at any point: it should import cleanly and
-stop at the first ``NotImplementedError`` you have not yet replaced.
+Fill in every function body marked ``# TODO``. The model-fitting primitives
+(`np.polyfit`/`np.polyval`, the provided `lasso_fit`), the fold splitter
+(`kfold_indices`), the data generators, the QC driver, and `main` are provided —
+this problem set is about *selecting* with them, not re-deriving them. The
+autograder imports these functions by name, so keep the signatures exactly as
+given. Run with ``python ps2.py``; it stops at the first unimplemented function.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
 
-from ddm4bio.config import GLOBAL_SEED
+from ddm4bio.config import GLOBAL_SEED, seed_everything
 from ddm4bio.interpret import interpretation_block
 
-# hill is used by the provided data generator; fit_hill / regularized_derivative /
-# lasso_select are the library calls you will use inside the TODO bodies below.
-from ddm4bio.methods.fitting import (  # noqa: F401
-    fit_hill,
-    hill,
-    lasso_select,
-    regularized_derivative,
-)
-
-
 # --------------------------------------------------------------------------- #
-# Data generation (offline ground truth) -- provided, do not change           #
+# Provided: data + fitting primitives (do not edit)                            #
 # --------------------------------------------------------------------------- #
-def simulate_dose_response(
-    ec50: float = 5.0,
-    hill_coeff: float = 1.8,
-    bottom: float = 0.05,
-    top: float = 1.0,
-    n_doses: int = 12,
-    n_replicates: int = 6,
-    noise: float = 0.03,
-    seed: int = GLOBAL_SEED,
-) -> dict[str, Any]:
-    """Generate a synthetic dose-response assay with replicate noise.
 
-    Provided for you. Returns a dict with keys "dose" (shape ``(n_doses,)``),
-    "response" (shape ``(n_replicates, n_doses)``), and "true" (the ground-truth
-    Hill parameters).
-    """
+
+def make_response_curve(
+    degree: int = 3, n: int = 90, noise: float = 1.2, seed: int = GLOBAL_SEED
+) -> tuple[np.ndarray, np.ndarray, int]:
+    """A noisy 1-D response whose true trend is a polynomial of ``degree``."""
     rng = np.random.default_rng(seed)
-    dose = np.logspace(-2.0, 2.0, n_doses)
-    clean = hill(dose, bottom, top, ec50, hill_coeff)
-    response = clean[None, :] + noise * rng.standard_normal((n_replicates, n_doses))
-    return {
-        "dose": dose,
-        "response": response,
-        "true": {
-            "bottom": bottom,
-            "top": top,
-            "ec50": ec50,
-            "hill_coeff": hill_coeff,
-        },
-    }
+    x = np.sort(rng.uniform(-2.0, 2.0, n))
+    coefs = rng.uniform(0.8, 1.5, degree + 1) * rng.choice([-1.0, 1.0], degree + 1)
+    y_true = np.polyval(coefs, x)
+    y = y_true + rng.normal(0.0, noise * float(y_true.std()), n)
+    return x, y, degree
 
 
-def _standardize_columns(x: np.ndarray) -> np.ndarray:
-    """Return ``x`` with each column shifted to zero mean and unit variance.
-
-    Provided helper -- use it before Lasso when features are on different
-    scales.
-    """
-    x = np.asarray(x, dtype=float)
-    mu = x.mean(axis=0)
-    sd = x.std(axis=0)
-    sd = np.where(sd > 0.0, sd, 1.0)
-    return (x - mu) / sd
-
-
-# --------------------------------------------------------------------------- #
-# Part A / B: nonlinear dose-response fit                                      #
-# --------------------------------------------------------------------------- #
-def fit_dose_response(
-    dose: np.ndarray,
-    response: np.ndarray,
-    seed: int = GLOBAL_SEED,
-) -> dict[str, Any]:
-    """Fit a Hill dose-response curve and score the goodness of fit.
-
-    Accept a 1-D response vector or a 2-D ``(n_replicates, n_doses)`` array.
-    Flatten replicates against their doses, call
-    :func:`ddm4bio.methods.fitting.fit_hill`, then extend its result dict with:
-
-    * "r_squared": coefficient of determination on the flattened points.
-    * "residuals": flattened observed-minus-fit residuals.
-    * "mean_residuals": per-dose residual of the replicate mean, ordered by
-      dose (used by the QC residual-structure check).
-    * "dose": the dose grid.
-
-    Returns
-    -------
-    dict
-        The ``fit_hill`` dict plus the four keys above.
-    """
-    dose = np.asarray(dose, dtype=float)
-    response = np.asarray(response, dtype=float)
-
-    # TODO: flatten replicates (if 2-D) against their doses, call fit_hill,
-    # compute R^2 and residuals, and return the extended dict described above.
-    raise NotImplementedError("implement fit_dose_response")
+def make_sparse_regression(
+    n: int = 120, p: int = 60, k: int = 6, noise: float = 1.0, seed: int = GLOBAL_SEED
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Linear regression ``y = X beta + noise`` with only ``k`` nonzero drivers."""
+    rng = np.random.default_rng(seed)
+    x = rng.standard_normal((n, p))
+    beta = np.zeros(p)
+    support = np.sort(rng.choice(p, k, replace=False))
+    beta[support] = rng.uniform(1.5, 3.0, k) * rng.choice([-1.0, 1.0], k)
+    y = x @ beta + rng.normal(0.0, noise, n)
+    return x, y, support
 
 
-def bootstrap_ec50(
-    dose: np.ndarray,
-    response: np.ndarray,
-    n_boot: int = 500,
-    ci: float = 0.95,
-    seed: int = GLOBAL_SEED,
-) -> dict[str, Any]:
-    """Bootstrap the EC50 and Hill coefficient over replicate noise.
-
-    For each of ``n_boot`` iterations: resample the replicates at every dose
-    with replacement, refit the replicate mean with ``fit_hill``, and record the
-    EC50 and Hill coefficient. Report the medians as point estimates and the
-    central ``ci`` percentile band as the confidence interval. Drop fits that
-    did not converge or gave a non-positive EC50.
-
-    Returns
-    -------
-    dict
-        Keys: "ec50", "hill_coeff" (medians); "ec50_ci", "hill_ci" (``(lo, hi)``
-        tuples); "ec50_samples", "hill_samples" (valid draws); "n_valid".
-    """
-    dose = np.asarray(dose, dtype=float)
-    response = np.asarray(response, dtype=float)
-    if response.ndim != 2:
-        raise ValueError("response must be 2-D (n_replicates, n_doses) for the bootstrap")
-
-    # TODO: build a np.random.default_rng(seed), run the replicate bootstrap,
-    # and summarize the EC50/Hill distributions into point estimates and
-    # percentile intervals. Hint: np.take_along_axis lets you resample replicate
-    # rows per dose column.
-    raise NotImplementedError("implement bootstrap_ec50")
-
-
-# --------------------------------------------------------------------------- #
-# Part A: regularized vs finite-difference differentiation                    #
-# --------------------------------------------------------------------------- #
-def compare_derivative_methods(
-    y: np.ndarray,
-    dx: float,
-    deriv_true: np.ndarray,
-    lam: float = 0.1,
-) -> dict[str, Any]:
-    """Compare regularized differentiation to a finite difference.
-
-    Estimate the derivative of ``y`` two ways -- with
-    :func:`ddm4bio.methods.fitting.regularized_derivative` and with
-    ``np.gradient`` -- and score each by its L2 distance to the known analytic
-    derivative ``deriv_true``.
-
-    Returns
-    -------
-    dict
-        Keys: "reg_derivative", "fd_derivative"; "error_regularized",
-        "error_finite_difference"; "improvement" (fd error minus reg error).
-    """
-    y = np.asarray(y, dtype=float)
-    deriv_true = np.asarray(deriv_true, dtype=float)
-
-    # TODO: compute both derivative estimates, their L2 errors against
-    # deriv_true, and return the dict described above.
-    raise NotImplementedError("implement compare_derivative_methods")
-
-
-# --------------------------------------------------------------------------- #
-# Part A / B: L1 sparse feature selection                                      #
-# --------------------------------------------------------------------------- #
-def sparse_biomarkers(
-    x: np.ndarray,
-    y: np.ndarray,
-    alpha: float | None = None,
-    standardize: bool = True,
-    seed: int = GLOBAL_SEED,
-) -> dict[str, Any]:
-    """Select a sparse biomarker set with the Lasso.
-
-    Optionally z-score the columns (use ``_standardize_columns``), then delegate
-    to :func:`ddm4bio.methods.fitting.lasso_select`.
-
-    Returns
-    -------
-    dict
-        The ``lasso_select`` dict: "selected", "coefficients", "intercept",
-        "alpha".
-    """
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-
-    # TODO: standardize (if requested) and call lasso_select; return its dict.
-    raise NotImplementedError("implement sparse_biomarkers")
-
-
-def stability_selection(
-    x: np.ndarray,
-    y: np.ndarray,
-    n_boot: int = 100,
-    alpha: float | None = None,
-    subsample: float = 0.75,
-    threshold: float = 0.6,
-    standardize: bool = True,
-    seed: int = GLOBAL_SEED,
-) -> dict[str, Any]:
-    """Rank features by how often the Lasso selects them across subsamples.
-
-    Each iteration: draw a random ``subsample`` fraction of the rows without
-    replacement, standardize that subsample independently (if requested), run
-    ``lasso_select``, and tally which features it keeps. Features selected in at
-    least ``threshold`` fraction of iterations are "stable".
-
-    Returns
-    -------
-    dict
-        Keys: "frequency" (per-feature selection frequency, shape
-        ``(n_features,)``); "stable" (indices with frequency >= threshold);
-        "threshold"; "n_boot".
-    """
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-
-    # TODO: build a np.random.default_rng(seed), run the subsampling loop,
-    # accumulate per-feature selection counts, convert to frequencies, and
-    # threshold to get the stable set.
-    raise NotImplementedError("implement stability_selection")
-
-
-# --------------------------------------------------------------------------- #
-# Part C: quality control                                                      #
-# --------------------------------------------------------------------------- #
-def residual_structure(residuals: np.ndarray) -> dict[str, Any]:
-    """Summarize residual structure for a goodness-of-fit QC check.
-
-    Compute the lag-1 autocorrelation of the (dose-ordered) residuals and the
-    number of same-sign runs. A good fit leaves near-zero autocorrelation and
-    many sign runs; systematic misfit leaves strong positive autocorrelation and
-    few runs.
-
-    Returns
-    -------
-    dict
-        Keys: "lag1_autocorr" and "n_sign_runs".
-    """
-    # TODO: coerce residuals to a float array, then compute the lag-1
-    # autocorrelation and the count of same-sign runs.
-    raise NotImplementedError("implement residual_structure")
-
-
-def load_breast_cancer_frame():
-    """Load the breast-cancer panel as a labelled DataFrame via the data layer.
-
-    Provided for you. Loaded through :func:`ddm4bio.datasets.get_dataset` with
-    ``download=False`` (offline, deterministic: the scikit-learn bundled WDBC
-    data, or a synthetic fallback only if scikit-learn is absent). Returns
-    ``(x, y, frame)`` where ``frame`` carries the features plus a ``target``
-    column so ``ddm4bio.qc.qc_tabular`` reports class balance.
-    """
+def load_biomarkers(seed: int = GLOBAL_SEED) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    """Real Breast-Cancer-Wisconsin measurements, standardized (offline)."""
     from ddm4bio.datasets import get_dataset
 
-    payload = get_dataset("breast_wisconsin", download=False).payload
-    frame = payload["X"].copy()
-    frame.columns = list(payload["feature_names"])
-    x = frame.to_numpy(dtype=float)
-    y = np.asarray(payload["y"], dtype=int)
-    frame["target"] = y
-    return x, y, frame
+    ds = get_dataset("breast_wisconsin", seed=seed)
+    x = np.asarray(ds.payload["X"], dtype=float)
+    x = (x - x.mean(axis=0)) / (x.std(axis=0) + 1e-12)
+    y = np.asarray(ds.payload["y"], dtype=float)
+    names = list(ds.payload["feature_names"])
+    return x, y, names
+
+
+def kfold_indices(n: int, folds: int = 5, seed: int = GLOBAL_SEED) -> list[np.ndarray]:
+    """(provided) Deterministic k-fold: a list of held-out index arrays."""
+    rng = np.random.default_rng(seed)
+    order = rng.permutation(n)
+    return [np.sort(part) for part in np.array_split(order, folds)]
+
+
+def lasso_fit(x: np.ndarray, y: np.ndarray, alpha: float) -> tuple[np.ndarray, float]:
+    """(provided) Fit an L1-penalized linear model; return ``(coef, intercept)``."""
+    from sklearn.linear_model import Lasso
+
+    model = Lasso(alpha=alpha, max_iter=10000).fit(x, y)
+    return model.coef_, float(model.intercept_)
 
 
 # --------------------------------------------------------------------------- #
-# Driver -- provided, wires QC and the interpretation block                    #
+# Part A -- Model-complexity selection by cross-validation  (you implement)    #
 # --------------------------------------------------------------------------- #
+
+
+def poly_cv_mse(x: np.ndarray, y: np.ndarray, degree: int, folds: list[np.ndarray]) -> float:
+    """Cross-validated mean squared error of a degree-``degree`` polynomial fit.
+
+    For each held-out fold: fit the polynomial on the OTHER folds (`np.polyfit`),
+    predict the held-out points (`np.polyval`), and average the MSE over folds.
+    """
+    # TODO: loop over `folds`; for each, train on the complement (np.setdiff1d
+    # against np.arange(len(x))), fit np.polyfit(x_train, y_train, degree), predict
+    # np.polyval(coefs, x_test), and accumulate the mean squared test error. Return
+    # the average over folds.
+    raise NotImplementedError("Implement poly_cv_mse.")
+
+
+def select_degree(
+    x: np.ndarray, y: np.ndarray, candidate_degrees: list[int], folds: list[np.ndarray]
+) -> tuple[int, np.ndarray]:
+    """Degree from ``candidate_degrees`` with the lowest cross-validated MSE.
+
+    Returns ``(best_degree, mse_by_degree)``; the curve falls (underfitting) then
+    rises (overfitting).
+    """
+    # TODO: build mse_by_degree = [poly_cv_mse(x, y, d, folds) for d in
+    # candidate_degrees] as an array; best_degree is the candidate with the
+    # smallest CV-MSE. Return (best_degree, mse_by_degree).
+    raise NotImplementedError("Implement select_degree.")
+
+
+# --------------------------------------------------------------------------- #
+# Part B -- Sparse feature selection by cross-validation  (you implement)      #
+# --------------------------------------------------------------------------- #
+
+
+def lasso_cv_mse(x: np.ndarray, y: np.ndarray, alpha: float, folds: list[np.ndarray]) -> float:
+    """Cross-validated MSE of a Lasso fit at penalty ``alpha``.
+
+    For each held-out fold: `lasso_fit` on the OTHER folds, predict the held-out
+    rows (`X @ coef + intercept`), and average the MSE.
+    """
+    # TODO: like poly_cv_mse, but fit with the provided lasso_fit(x_train, y_train,
+    # alpha) -> (coef, intercept) and predict x_test @ coef + intercept.
+    raise NotImplementedError("Implement lasso_cv_mse.")
+
+
+def select_alpha(
+    x: np.ndarray, y: np.ndarray, candidate_alphas: list[float], folds: list[np.ndarray]
+) -> tuple[float, np.ndarray]:
+    """Penalty from ``candidate_alphas`` with the lowest cross-validated MSE.
+
+    Returns ``(best_alpha, mse_by_alpha)``.
+    """
+    # TODO: build mse_by_alpha over candidate_alphas with lasso_cv_mse; best_alpha
+    # is the one with the smallest CV-MSE. Return (best_alpha, mse_by_alpha).
+    raise NotImplementedError("Implement select_alpha.")
+
+
+def selected_features(x: np.ndarray, y: np.ndarray, alpha: float) -> np.ndarray:
+    """Indices of the features with a nonzero Lasso coefficient at ``alpha``."""
+    # TODO: fit lasso_fit(x, y, alpha) and return np.flatnonzero(coef).
+    raise NotImplementedError("Implement selected_features.")
+
+
+def support_scores(selected: np.ndarray, true_support: np.ndarray) -> dict:
+    """Precision and recall of a selected feature set against the true drivers.
+
+    Returns ``{"precision": ..., "recall": ...}``. Precision is the fraction of
+    selected features that are real drivers; recall is the fraction of real drivers
+    that were selected. Return zeros (not a crash) if a set is empty.
+    """
+    # TODO: intersect the selected indices with the true support; precision =
+    # hits / #selected, recall = hits / #true. Guard empty sets.
+    raise NotImplementedError("Implement support_scores.")
+
+
+# --------------------------------------------------------------------------- #
+# Provided: QC + driver                                                        #
+# --------------------------------------------------------------------------- #
+
+
+def run_qc(folds: list[np.ndarray], n: int) -> None:
+    """Print a QC block before any results (provided)."""
+    covered = np.concatenate(folds)
+    disjoint = len(covered) == n and len(np.unique(covered)) == n
+    print(
+        f"Cross-validation QC: {len(folds)} folds partition all {n} rows "
+        f"exactly once (disjoint & complete = {disjoint})."
+    )
+    print("No fold is fit on its own held-out rows, so each CV score is out-of-sample.")
+
+
 def main() -> None:
-    """Run the full PS2 pipeline and print QC + an interpretation block."""
-    from ddm4bio.qc.tabular import qc_tabular
+    """Select model complexity and a sparse feature set by cross-validation."""
+    seed_everything()
 
-    assay = simulate_dose_response(seed=GLOBAL_SEED)
-    dose, response, truth = assay["dose"], assay["response"], assay["true"]
+    # ---- Part A: model-complexity selection (synthetic, known truth) --------
+    print("== Part A: choosing polynomial complexity by cross-validation ==")
+    x, y, true_degree = make_response_curve(degree=3)
+    folds_a = kfold_indices(len(x), folds=5)
+    run_qc(folds_a, len(x))
+    degrees = [1, 2, 3, 4, 5, 6, 8, 10]
+    best_degree, mse_by_degree = select_degree(x, y, degrees, folds_a)
+    for d, m in zip(degrees, mse_by_degree):
+        print(f"    degree={d:>2d}  CV-MSE={m:8.3f}{'  <-- selected' if d == best_degree else ''}")
+    print(f"  true degree = {true_degree}; cross-validation selected degree {best_degree}")
 
-    fit = fit_dose_response(dose, response, seed=GLOBAL_SEED)
-    boot = bootstrap_ec50(dose, response, n_boot=400, seed=GLOBAL_SEED)
-
-    n = 300
-    t = np.linspace(0.0, 2.0 * np.pi, n)
-    dx = t[1] - t[0]
-    rng = np.random.default_rng(GLOBAL_SEED)
-    noisy = np.sin(t) + 0.05 * rng.standard_normal(n)
-    deriv = compare_derivative_methods(noisy, dx, np.cos(t), lam=0.1)
-
-    x_bc, y_bc, frame = load_breast_cancer_frame()
-
-    # QC-before-results (golden rule): inspect the tabular panel first.
-    print(qc_tabular(frame).render())
-    print()
-
-    sparse = sparse_biomarkers(x_bc, y_bc, seed=GLOBAL_SEED)
-    stab = stability_selection(x_bc, y_bc, n_boot=100, alpha=0.02, threshold=0.6, seed=GLOBAL_SEED)
-    feature_names = list(frame.columns[:-1])
-    struct = residual_structure(fit["mean_residuals"])
-
-    print(f"true EC50={truth['ec50']:.3f}  fitted EC50={fit['ec50']:.3f}")
-    print(f"R^2 = {fit['r_squared']:.4f}")
+    # ---- Part B: sparse feature selection -----------------------------------
+    print("\n== Part B: choosing a sparse feature set by cross-validation ==")
+    xs, ys, true_support = make_sparse_regression(k=6)
+    folds_b = kfold_indices(len(xs), folds=5)
+    alphas = [round(a, 4) for a in np.geomspace(0.01, 2.0, 10)]
+    best_alpha, _mse_by_alpha = select_alpha(xs, ys, alphas, folds_b)
+    sel = selected_features(xs, ys, best_alpha)
+    scores = support_scores(sel, true_support)
+    print(f"  synthetic recovery (true drivers = {len(true_support)}):")
     print(
-        f"bootstrap EC50 = {boot['ec50']:.3f} "
-        f"95% CI [{boot['ec50_ci'][0]:.3f}, {boot['ec50_ci'][1]:.3f}]"
+        f"    CV-best alpha = {best_alpha}; selected {len(sel)} features; "
+        f"precision={scores['precision']:.2f} recall={scores['recall']:.2f}"
     )
-    print(f"error(reg)={deriv['error_regularized']:.4f}")
-    print(f"error(fd)={deriv['error_finite_difference']:.4f}")
-    print(f"residual lag-1 autocorr={struct['lag1_autocorr']:.3f}")
-    print(f"residual sign runs={struct['n_sign_runs']}")
-    print(f"Lasso selected {sparse['selected'].size} features")
 
-    lo, hi = boot["ec50_ci"]
-    stable_names = [feature_names[i] for i in stab["stable"]]
-    print(
-        interpretation_block(
-            claim=(
-                f"The assay's half-maximal dose is EC50 = {boot['ec50']:.2f} "
-                f"(95% CI [{lo:.2f}, {hi:.2f}]); {len(stable_names)} breast-cancer "
-                "features are selected stably across subsamples."
-            ),
-            confidence="moderate",
-            limitations_list=[
-                "synthetic assay with a known Hill curve",
-                "bootstrap over replicate noise only, not the dose design",
-                "Lasso is scale- and alpha-sensitive; no held-out test set",
-            ],
-            evidence=f"R^2 = {fit['r_squared']:.3f}; stability selection across 100 subsamples",
-        )
+    # Real application: a biomarker panel on breast-cytology data.
+    xb, yb, names = load_biomarkers()
+    folds_r = kfold_indices(len(xb), folds=5)
+    best_alpha_r, _ = select_alpha(xb, yb, alphas, folds_r)
+    panel = selected_features(xb, yb, best_alpha_r)
+    print(f"  real WDBC panel: CV-best alpha = {best_alpha_r}; {len(panel)} biomarkers:")
+    print("    " + ", ".join(names[i] for i in panel[:8]) + (" ..." if len(panel) > 8 else ""))
+
+    print("\n== Interpretation ==")
+    block = interpretation_block(
+        claim=(
+            f"Cross-validation recovers the true model complexity (degree {best_degree} of a "
+            f"degree-{true_degree} signal) and the true drivers (recall {scores['recall']:.2f}) "
+            f"without ever seeing the ground truth, and yields a {len(panel)}-marker panel on "
+            f"real breast-cytology data."
+        ),
+        confidence="high",
+        limitations_list=[
+            "CV-tuned Lasso recovers the real drivers but over-selects (precision "
+            f"{scores['precision']:.2f}) -- held-out error favors keeping a few spurious features.",
+            "Each CV score is a single held-out estimate; a different fold seed shifts it.",
+            "The real panel has no ground-truth driver set, so it is read qualitatively, "
+            "not scored for recovery.",
+        ],
+        evidence=(
+            "U-shaped CV-MSE curves over degree and over penalty, disjoint-and-complete "
+            "folds, precision/recall against a known synthetic support"
+        ),
     )
+    print(block)
 
 
 if __name__ == "__main__":
