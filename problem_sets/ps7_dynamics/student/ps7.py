@@ -392,10 +392,10 @@ def main() -> None:
     smoothed = np.convolve(incidence, np.ones(7) / 7.0, mode="valid")
     log_inc = np.log1p(smoothed)
     onset = int(np.argmax(smoothed > 0.01 * smoothed.max()))
-    early = log_inc[onset:onset + min(60, log_inc.size - onset)]
+    early = log_inc[onset : onset + min(60, log_inc.size - onset)]
     n_delays = 10
     cols = early.size - n_delays + 1
-    covid_snaps = np.stack([early[i:i + cols] for i in range(n_delays)])
+    covid_snaps = np.stack([early[i : i + cols] for i in range(n_delays)])
     epi = dmd_forecast(covid_snaps, n_train=int(0.7 * covid_snaps.shape[1]))
     print("train    rel-L2 :", f"{epi['train_error']:.3f}")
     print("held-out rel-L2 :", f"{epi['test_error']:.3f}  (short-horizon forecast)")

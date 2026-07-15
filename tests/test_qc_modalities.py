@@ -108,9 +108,7 @@ def _make_defective_signal() -> np.ndarray:
     #   * two NaN values,
     #   * one flatline segment (3.0 repeated three times),
     #   * clipped/saturated samples at the observed min (0) and max (10).
-    return np.array(
-        [0.0, 1.0, 3.0, 3.0, 3.0, 7.0, 10.0, np.nan, np.nan, 0.0, 10.0, 5.0]
-    )
+    return np.array([0.0, 1.0, 3.0, 3.0, 3.0, 7.0, 10.0, np.nan, np.nan, 0.0, 10.0, 5.0])
 
 
 def test_qc_signals_records_all_defects_and_warns():
