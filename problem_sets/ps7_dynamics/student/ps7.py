@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from ddm4bio.datasets import get_dataset
 from ddm4bio.datasets.synthetic import (
     make_fitzhugh_nagumo,
     make_linear_dynamics,
@@ -375,6 +376,48 @@ def main() -> None:
     print("raw   L2 error  :", round(phys["error_raw"], 3))
     print("filt  L2 error  :", round(phys["error_filtered"], 3))
     print("filter improved :", phys["improved"])
+
+    # --- Part B (real data): apply DMD to a REAL epidemic curve --------------
+    # After validating DMD on a synthetic linear system, apply your dmd_forecast
+    # to a real epidemic curve loaded through the data layer. get_dataset returns
+    # the archived JHU CSSE COVID-19 series when reachable, else a deterministic
+    # synthetic fallback with the SAME (date, cases) shape -- this block runs
+    # identically either way, and prints the source so you know which you got.
+    covid = get_dataset("jhu_covid")
+    print("\n=== Part B (real): epidemic curve via DMD ===")
+    print("data source     :", covid.source)
+    print("provenance      :", covid.provenance)
+    cases = np.asarray(covid.payload["cases"], dtype=float)
+    incidence = np.clip(np.diff(cases), 0.0, None)  # daily new cases
+    smoothed = np.convolve(incidence, np.ones(7) / 7.0, mode="valid")
+    log_inc = np.log1p(smoothed)
+    onset = int(np.argmax(smoothed > 0.01 * smoothed.max()))
+    early = log_inc[onset:onset + min(60, log_inc.size - onset)]
+    n_delays = 10
+    cols = early.size - n_delays + 1
+    covid_snaps = np.stack([early[i:i + cols] for i in range(n_delays)])
+    epi = dmd_forecast(covid_snaps, n_train=int(0.7 * covid_snaps.shape[1]))
+    print("train    rel-L2 :", f"{epi['train_error']:.3f}")
+    print("held-out rel-L2 :", f"{epi['test_error']:.3f}  (short-horizon forecast)")
+
+    # --- Part B (real data): Kalman-filter a REAL physiological signal -------
+    # A single MIT-BIH ECG lead (real via wfdb, else a deterministic ECG-like
+    # fallback with the same payload shape). There is no clean ground truth, so we
+    # report the drop in sample-to-sample roughness (a reference-free noise proxy)
+    # rather than an error against a known signal.
+    ecg = get_dataset("mitbih")
+    print("\n=== Part B (real): ECG via Kalman filter ===")
+    print("data source     :", ecg.source)
+    print("provenance      :", ecg.provenance)
+    ecg_lead = np.asarray(ecg.payload["signal"], dtype=float)[:1500, :1]
+    ecg_qc = qc_signals(ecg_lead.T, fs=float(ecg.payload["fs"]))
+    print(ecg_qc.render())
+    ecg_filtered = kalman_denoise(ecg_lead, process_var=0.02, meas_var=0.5)
+    raw_rough = float(np.mean(np.abs(np.diff(ecg_lead, axis=0))))
+    filt_rough = float(np.mean(np.abs(np.diff(ecg_filtered, axis=0))))
+    print("raw  roughness  :", round(raw_rough, 4))
+    print("filt roughness  :", round(filt_rough, 4))
+    print("roughness drop  :", f"{raw_rough / filt_rough:.1f}x")
 
     # --- Part D: honest interpretation block ---------------------------------
     print("\n=== Part D: Interpretation ===")

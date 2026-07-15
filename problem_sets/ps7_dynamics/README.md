@@ -16,23 +16,37 @@ failure mode that you are expected to find and report.
 
 ## Data
 
-Everything is **offline**. There are no downloads and no network calls. All
-signals come from `ddm4bio.datasets.synthetic`, which returns dataclasses that
-carry the *known ground truth* alongside the generated observations:
+**Ground-truth validation (synthetic).** Every scored result runs on
+`ddm4bio.datasets.synthetic`, which returns dataclasses carrying the *known
+ground truth* alongside the generated observations, so recovery can be scored
+exactly:
 
 - `make_linear_dynamics(eigs, ...)` -- a real linear system with a prescribed
   spectrum, plus a generated trajectory (for DMD).
 - `make_sir(beta, gamma, ...)` -- an SIR epidemic with known rate parameters
-  (synthetic "case-count" style data for SINDy).
+  (synthetic "case-count" style data for SINDy term recovery).
 - `make_fitzhugh_nagumo(...)` -- a FitzHugh-Nagumo neuron trace used here as a
-  stand-in *physiological signal* (for Kalman filtering).
+  stand-in *physiological signal* for the Kalman ground-truth check.
 - `make_lorenz(..., noise=...)` -- a Lorenz trajectory with optional additive
   observation noise (available if you want to explore the chaotic case).
 
-Because the ground truth is known, you can score your recovered dynamics exactly
-with `ddm4bio.methods.validation.term_recovery` and
-`reconstruction_error`. Use the library methods
-`ddm4bio.methods.dynamics.dmd`, `sindy_fit`, and `kalman_filter`, and run the QC
+**Real-data application (via the data layer).** After the methods are validated
+on synthetic truth, the driver applies them to real biomedical recordings loaded
+through `from ddm4bio.datasets import get_dataset`:
+
+- `get_dataset("jhu_covid")` -- an archived JHU CSSE COVID-19 confirmed-case
+  series (a `(date, cases)` DataFrame) for the DMD short-horizon epidemic
+  forecast.
+- `get_dataset("mitbih")` -- a MIT-BIH Arrhythmia Database ECG lead
+  (`{"signal", "fs", "sig_names"}`) for Kalman filtering a real noisy signal.
+
+`get_dataset` tries the real source and caches it; with no network or a missing
+optional dependency it returns a clearly-labelled synthetic fallback with the
+*same payload shape*, so the pipeline runs **offline and deterministically**
+either way and prints `ds.source` / `ds.provenance` so you always know which you
+got. Score recovered dynamics with `ddm4bio.methods.validation.term_recovery`
+and `reconstruction_error`; use the library methods
+`ddm4bio.methods.dynamics.dmd`, `sindy_fit`, and `kalman_filter`; and run the QC
 golden rule (`ddm4bio.qc.signals.qc_signals`) before analyzing any signal.
 
 ## What to implement
@@ -69,6 +83,14 @@ QC plumbing are already wired; you implement only the method logic where the
    noisy, ...)`: Kalman-filter a noisy physiological signal (a FitzHugh-Nagumo
    trace) and compare the filtered estimate against the raw signal, quantifying
    the improvement in L2 error.
+
+Items 4-5 are the *ground-truth* checks -- they need a known answer (the true SIR
+terms, a clean FHN reference) to score against. The driver then **applies the
+same validated methods to real recordings** loaded via `get_dataset`: it runs
+your `dmd_forecast` on the `jhu_covid` epidemic curve (a short-horizon forecast
+off the early-onset window) and your `kalman_denoise` on a `mitbih` ECG lead
+(reporting the roughness reduction, since no clean reference exists). Both print
+`ds.source` / `ds.provenance` and fall back to synthetic data offline.
 
 ### Part C -- Quality control (required)
 

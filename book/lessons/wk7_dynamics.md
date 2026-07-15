@@ -358,7 +358,200 @@ estimated, and a mis-specified model would bias the filter toward its own wrong
 predictions -- which is exactly why the DMD/SINDy step of learning an honest
 model comes first.
 
-## 4. Interpretation
+## 4. Application: DMD on a real epidemic curve
+
+The synthetic sections earned the methods their license; now we spend it on data
+whose governing equations nobody wrote down. We pull an archived Johns Hopkins
+CSSE COVID-19 confirmed-case time series through the course data layer. The
+loader tries the real frozen archive first and caches it; with no network (or no
+`pandas`) it returns a deterministic, clearly-labelled synthetic epidemic curve
+with the *same* `(date, cases)` shape, so the analysis below runs identically
+either way. We print the provenance so the reader always knows which they got.
+
+```{code-cell} ipython3
+from ddm4bio.datasets import get_dataset
+
+covid = get_dataset("jhu_covid")  # payload: DataFrame with columns (date, cases)
+print(f"source = {covid.source}")
+print(f"provenance: {covid.provenance}")
+
+cases = np.asarray(covid.payload["cases"], dtype=float)
+print(f"cumulative confirmed-case series: {cases.shape[0]} daily points")
+```
+
+The raw series is *cumulative* confirmed cases. The dynamical object is its rate
+of change, so we difference it into daily new cases, apply a one-week moving
+average to suppress reporting-day artefacts, and take `log(1 + ·)` so the
+exponential rise becomes an approximately linear ramp. We then isolate the
+**early-onset window** -- a fixed span starting when incidence first lifts off --
+because that is where a single linear operator is a defensible local model; a
+full multi-wave series is emphatically not one linear system. A scalar time
+series carries no spatial modes for DMD to find, so we embed it in a **time-delay
+(Hankel)** coordinate: stacking `n_delays` shifted copies turns the 1-D signal
+into a multi-row snapshot matrix whose linear operator encodes the local
+dynamics (the delay-embedding trick Kutz develops alongside DMD).
+
+```{code-cell} ipython3
+new_cases = np.clip(np.diff(cases), 0.0, None)
+smoothed = np.convolve(new_cases, np.ones(7) / 7.0, mode="valid")
+signal = np.log1p(smoothed)
+
+
+def hankel(x, n_delays):
+    """Stack n_delays shifted copies into a (n_delays, n_time) snapshot matrix."""
+    cols = x.size - n_delays + 1
+    return np.stack([x[i:i + cols] for i in range(n_delays)])
+
+
+# Onset = first day incidence exceeds 1% of its peak; take a fixed early window.
+onset = int(np.argmax(smoothed > 0.01 * smoothed.max()))
+window_len = min(60, signal.size - onset)
+early = signal[onset:onset + window_len]
+
+n_delays = 10
+snapshots = hankel(early, n_delays)
+n_time = snapshots.shape[1]
+n_train = int(0.7 * n_time)  # fit on the first 70%, forecast the rest
+print(f"onset day {onset}, window {window_len} days -> Hankel snapshots {snapshots.shape}")
+```
+
+Fitting DMD to the training portion gives a dominant discrete-time eigenvalue
+whose magnitude is the per-day multiplicative factor of the leading delay mode:
+`|lambda| > 1` is a growing epidemic, `< 1` a receding one, and `log|lambda|`
+the continuous growth rate whose reciprocal (times `ln 2`) is a doubling time an
+epidemiologist can act on. Because the operator is linear it is trustworthy only
+for a *short* forecast, so we fit on the first 70% of the window and score
+held-out relative-L2 error at 7- and 14-day horizons on the remainder.
+
+```{code-cell} ipython3
+epi_dmd = dmd(snapshots[:, :n_train], r=6)
+lead = epi_dmd.eigenvalues[np.argmax(np.abs(epi_dmd.eigenvalues))]
+rate = float(np.log(np.abs(lead)))
+
+print(f"dominant |lambda|   : {np.abs(lead):.4f}")
+print(f"per-day growth rate : {rate:+.4f}")
+if rate > 0.002:
+    print(f"leading mode growing: doubling time ~ {np.log(2) / rate:.1f} days")
+elif rate < -0.002:
+    print(f"leading mode receding: halving time ~ {np.log(2) / -rate:.1f} days")
+else:
+    print("leading mode ~ neutral (|lambda| ~ 1): window straddles rise and plateau")
+
+time_index = np.arange(n_time)
+dynamics = np.power(epi_dmd.eigenvalues[:, np.newaxis], time_index[np.newaxis, :])
+recon = (epi_dmd.modes @ (dynamics * epi_dmd.amplitudes[:, np.newaxis])).real
+
+for horizon in (7, 14):
+    stop = min(n_train + horizon, n_time)
+    err = reconstruction_error(snapshots[:, n_train:stop], recon[:, n_train:stop], "rel_l2")
+    print(f"forecast horizon {horizon:>2}d : held-out rel-L2 = {err:.3f}")
+```
+
+The overlay tells the same story visually. On the current-value row of the Hankel
+embedding we plot the smoothed early incidence against the DMD reconstruction;
+the fit is tight through the training window and the short forecast, then drifts
+once the linear model is extrapolated past the regime it was fit on.
+
+```{code-cell} ipython3
+current = early[n_delays - 1:]
+days = np.arange(current.size) + onset
+
+fig, ax = plt.subplots(figsize=(7.5, 4.2))
+ax.plot(days, np.expm1(current), color="#0072B2", linewidth=1.8,
+        label="smoothed daily new cases")
+ax.plot(days, np.expm1(recon[-1]), color="#D55E00", linewidth=1.6, linestyle="--",
+        label="DMD reconstruction / forecast")
+ax.axvline(onset + n_train, color="0.5", linestyle=":", linewidth=1.0,
+           label="end of training window")
+ax.set_xlabel("Day of series")
+ax.set_ylabel("Daily new cases")
+ax.set_title(f"DMD on a real epidemic curve (source: {covid.source})")
+ax.legend(loc="upper left", fontsize=8)
+fig
+```
+
+**QC note.** DMD does not "know" epidemiology; it reports the best local linear
+operator over the window it is given, and its dominant eigenvalue reads off the
+leading mode's per-day amplification. Held-out error stays small a week or two
+out and grows past that -- the honest short-horizon boundary. On the clean
+synthetic curve the leading mode is a clear growth mode with a sensible doubling
+time; on real multi-wave data the same window may straddle a rise and its
+plateau, so the leading mode can read near-neutral -- a caution the print-out
+makes explicit rather than papering over. Either way the claim is about the near
+future of a locally linear regime, never a forecast through the epidemic's
+nonlinear turnover.
+
+## 5. Application: Kalman filtering a real ECG
+
+For the filter we assimilate a genuinely noisy physiological recording: a single
+lead from the MIT-BIH Arrhythmia Database, pulled through the same data layer.
+The real fetch uses PhysioNet via `wfdb`; offline it falls back to a
+deterministic ECG-like waveform with the identical payload shape (`signal`,
+`fs`, `sig_names`), so the filter and its plot render regardless.
+
+```{code-cell} ipython3
+ecg = get_dataset("mitbih")  # payload: {"signal": (n, ch), "fs": Hz, "sig_names": [...]}
+print(f"source = {ecg.source}")
+print(f"provenance: {ecg.provenance}")
+
+fs = float(ecg.payload["fs"])
+raw = np.asarray(ecg.payload["signal"], dtype=float)[:, :1]  # first lead
+window = raw[:1500]  # a few seconds at 360 Hz
+print(f"lead '{ecg.payload['sig_names'][0]}' at {fs:g} Hz, window = {window.shape[0]} samples")
+```
+
+Unlike the synthetic oscillation of Section 3, here we have no ground-truth clean
+trace and no known transition matrix. The pragmatic, honest model is the
+**random-walk** Kalman filter: each sample is assumed to persist (`F = H = I`),
+observed through additive noise. The ratio of process variance `Q` to
+measurement variance `R` sets the smoothing strength -- trusting the model more
+(smaller `Q/R`) smooths harder. Because we cannot score against a clean signal,
+we measure denoising as the drop in sample-to-sample **roughness** (mean absolute
+first difference), a reference-free proxy for high-frequency noise.
+
+```{code-cell} ipython3
+identity = np.eye(1)
+filtered = kalman_filter(window, F=identity, H=identity,
+                         Q=0.02 * identity, R=0.5 * identity)
+
+
+def roughness(z):
+    """Mean absolute first difference -- a reference-free high-frequency-noise proxy."""
+    return float(np.mean(np.abs(np.diff(z, axis=0))))
+
+
+print(f"raw roughness      : {roughness(window):.4f}")
+print(f"filtered roughness : {roughness(filtered):.4f}")
+print(f"roughness reduction: {roughness(window) / roughness(filtered):.1f}x")
+```
+
+The panel overlays the raw lead and the filtered estimate over the same window.
+The filter tracks the large QRS excursions while shaving the jitter between beats
+-- the visible signature of a filter that trusts the data during fast transients
+and the model during quiet stretches.
+
+```{code-cell} ipython3
+t_sec = np.arange(window.shape[0]) / fs
+
+fig, ax = plt.subplots(figsize=(9.0, 3.6))
+ax.plot(t_sec, window[:, 0], color="0.6", linewidth=0.9, label="raw ECG")
+ax.plot(t_sec, filtered[:, 0], color="#D55E00", linewidth=1.3, label="Kalman filtered")
+ax.set_xlabel("Time (s)")
+ax.set_ylabel("Amplitude (mV)")
+ax.set_title(f"Random-walk Kalman filter on a real ECG lead (source: {ecg.source})")
+ax.legend(loc="upper right", fontsize=8)
+fig
+```
+
+**QC note.** With no clean reference we cannot claim an error reduction the way
+Section 3 could; we can only show the filter suppresses high-frequency roughness
+while preserving beat morphology. That is the correct posture for real data: the
+random-walk model is a deliberate, mis-specified simplification (a real ECG is
+not a random walk), so it is a reasonable denoiser but not a validated state
+estimator. The validated claim lives in Section 3, on synthetic ground truth;
+this section only *applies* the tool.
+
+## 6. Interpretation
 
 Every ddm4bio analysis closes with an explicit interpretation block: a single
 claim, an honest confidence level backed by named evidence, and a list of stated
@@ -394,6 +587,12 @@ block = interpretation_block(
         "SINDy recovery depends on the candidate library containing the true "
         "terms (here a degree-2 polynomial basis exactly spans Lorenz); a "
         "wrong library cannot recover terms it does not contain.",
+        "The real-data sections (a JHU COVID-19 curve for DMD, a MIT-BIH ECG "
+        "lead for the Kalman filter) have no ground truth to score against; each "
+        "prints its data source so a fallback run is never mistaken for real "
+        "data, and their claims are deliberately narrower than the synthetic "
+        "ones -- a short-horizon growth rate and a roughness reduction, not a "
+        "validated recovery.",
     ],
     evidence=f"DMD max eigenvalue error ~1e-15; SINDy term-recovery F1 = "
              f"{scores['f1']:.2f} on clean Lorenz with precision and recall = 1.0; "
