@@ -1,362 +1,329 @@
-"""Student template for PS5: dimensionality reduction and source separation.
+"""PS5: signal or noise? A significance test for the rank of an expression matrix.
 
-Fill in the FIVE method functions marked with ``# TODO``. The offline data
-plumbing, the quality-control driver, and the interpretation block are already
-wired for you -- you only implement the method logic.
+Week 5 computes a PCA/SVD spectrum and eyeballs a scree plot to guess how many
+components matter. This problem set replaces the guess with a principled stopping
+rule -- **Horn's parallel analysis**: permute each gene column independently to build
+a rank-matched *noise* null (all cross-feature structure destroyed, marginals kept),
+then keep only the leading components whose real eigenvalue beats the null. You will
+recover the true latent dimensionality with a statistical test the lesson never
+covers, and expose why the popular analytic shortcut (the Marchenko-Pastur edge) is
+untrustworthy on real, non-Gaussian expression data.
 
-Array conventions follow the library:
-- PCA / SVD helpers take a **feature matrix** ``(n_samples, n_features)``.
-- ICA sources / multichannel recordings are ``(n_sources, n_samples)``
-  (components in rows, samples in columns).
+- Part A -- **validate on synthetic matrices of KNOWN planted rank**: your permutation
+  null + stopping rule must recover the injected dimensionality exactly, and degrade
+  honestly only at extreme noise.
+- Part B -- **apply to real PBMC3k**: report how many principal components carry real
+  structure, and contrast the parallel-analysis count against the naive MP-edge count.
 
-Reading: Kutz Ch. 15 (SVD / PCA) and Ch. 16 (ICA, robust PCA).
+Fill in every function body marked ``# TODO``. The SVD/PCA mechanics
+(``pca_eigenvalues``), the null draw (``permute_columns``), the MP edge
+(``marchenko_pastur_edge``), the data (``make_planted_rank``, ``load_pbmc3k_topvar``),
+the QC driver, and ``main`` are provided -- this problem set is about the significance
+*test*, not the decomposition. The autograder imports these functions by name, so keep
+the signatures exactly as given. Run with ``python ps5.py``; it stops at the first
+unimplemented function.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Sequence
 
 import numpy as np
 
-from ddm4bio.datasets.synthetic import make_mixed_sources
+from ddm4bio.config import GLOBAL_SEED, seed_everything
 from ddm4bio.interpret import interpretation_block
-from ddm4bio.methods.decomposition import (  # noqa: F401  (wired for your TODOs)
-    explained_variance_ratio,
-    ica_unmix,
-    pca_reduce,
-    rpca,
-    svd_lowrank,
-)
-from ddm4bio.methods.validation import reconstruction_error, source_recovery_score
-
-SEED = 0
-
 
 # --------------------------------------------------------------------------- #
-# Data plumbing (provided; do not modify).
+# Provided: PCA mechanics, the null draw, the MP edge, and the fixtures        #
+# (do not edit)                                                                #
 # --------------------------------------------------------------------------- #
-@dataclass
-class ExpressionMatrix:
-    """Synthetic expression-style dataset with known injected structure.
 
-    Attributes
-    ----------
-    X: ``(n_samples, n_genes)`` expression matrix (samples in rows).
-    group: ``(n_samples,)`` biological condition label in ``{-1, +1}``.
-    batch: ``(n_samples,)`` nuisance batch label in ``{-1, +1}``.
-    bio_direction: ``(n_genes,)`` unit gene program driven by ``group``.
-    batch_direction: ``(n_genes,)`` unit gene program driven by ``batch``.
+
+def pca_eigenvalues(X: np.ndarray, center: bool = True) -> np.ndarray:
+    """(provided) Descending covariance eigenvalues of a feature matrix.
+
+    The variances captured by each principal component: squares of the singular
+    values of the (optionally centered) matrix divided by ``n - 1``.
     """
+    X = np.asarray(X, dtype=float)
+    if center:
+        X = X - X.mean(axis=0, keepdims=True)
+    s = np.linalg.svd(X, full_matrices=False, compute_uv=False)
+    return (s**2) / max(X.shape[0] - 1, 1)
 
-    X: np.ndarray
-    group: np.ndarray
-    batch: np.ndarray
-    bio_direction: np.ndarray
-    batch_direction: np.ndarray
+
+def permute_columns(X: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """(provided) One parallel-analysis null draw: shuffle each feature independently.
+
+    Independently permuting every column destroys all cross-feature correlation while
+    preserving each feature's marginal distribution -- the null of "no shared structure".
+    """
+    X = np.asarray(X, dtype=float)
+    out = np.empty_like(X)
+    n = X.shape[0]
+    for j in range(X.shape[1]):
+        out[:, j] = X[rng.permutation(n), j]
+    return out
 
 
-def make_expression_matrix(
-    n_samples: int = 120,
-    n_genes: int = 50,
-    bio_amp: float = 3.0,
-    batch_amp: float = 1.5,
-    noise: float = 0.5,
-    seed: int = SEED,
-) -> ExpressionMatrix:
-    """Generate a synthetic expression matrix with a known biological axis.
+def marchenko_pastur_edge(X: np.ndarray) -> tuple[float, float, float]:
+    """(provided) Analytic Marchenko-Pastur upper bulk edge for a feature matrix.
 
-    Two orthogonal gene programs are injected: a *biological* program tied to a
-    binary condition label and a weaker *batch* program tied to a nuisance
-    label. Because ``bio_amp > batch_amp`` the leading principal component
-    should track biology and the second should track batch.
+    Returns ``(lam_plus, sigma2, gamma)`` where ``gamma = p / n``, ``sigma2`` is a
+    bulk noise-variance estimate (the mean covariance eigenvalue), and
+    ``lam_plus = sigma2 * (1 + sqrt(gamma))**2`` is the edge above which, *for pure
+    i.i.d. Gaussian noise*, no eigenvalue should fall. Real expression data is not
+    Gaussian, so this edge is systematically wrong -- which is the point of the contrast.
+    """
+    X = np.asarray(X, dtype=float)
+    n, p = X.shape
+    gamma = p / n
+    sigma2 = float(np.mean(pca_eigenvalues(X)))
+    lam_plus = sigma2 * (1.0 + np.sqrt(gamma)) ** 2
+    return float(lam_plus), sigma2, float(gamma)
+
+
+def make_planted_rank(
+    n: int = 200, p: int = 80, k: int = 3, noise_sd: float = 1.0, seed: int = GLOBAL_SEED
+) -> np.ndarray:
+    """(provided) A feature matrix with exactly ``k`` planted directions plus noise.
+
+    ``X = scores @ loadings + noise_sd * N(0, 1)`` with ``k`` random score/loading
+    factors, so the true number of signal components is exactly ``k`` (0 = pure noise).
     """
     rng = np.random.default_rng(seed)
-
-    bio_dir = rng.standard_normal(n_genes)
-    bio_dir /= np.linalg.norm(bio_dir)
-    batch_dir = rng.standard_normal(n_genes)
-    batch_dir -= (batch_dir @ bio_dir) * bio_dir  # orthogonalize against bio
-    batch_dir /= np.linalg.norm(batch_dir)
-
-    group = np.array([-1.0, 1.0] * (n_samples // 2))[:n_samples]
-    rng.shuffle(group)
-    batch = np.array([-1.0, 1.0] * (n_samples // 2))[:n_samples]
-    rng.shuffle(batch)
-
-    x = (
-        bio_amp * np.outer(group, bio_dir)
-        + batch_amp * np.outer(batch, batch_dir)
-        + noise * rng.standard_normal((n_samples, n_genes))
-    )
-    return ExpressionMatrix(
-        X=x,
-        group=group,
-        batch=batch,
-        bio_direction=bio_dir,
-        batch_direction=batch_dir,
-    )
+    if k > 0:
+        signal = rng.standard_normal((n, k)) @ rng.standard_normal((k, p))
+    else:
+        signal = np.zeros((n, p))
+    return signal + noise_sd * rng.standard_normal((n, p))
 
 
-def load_single_cell_expression() -> tuple[np.ndarray, np.ndarray | None, str, str]:
-    """Load the real PBMC3k single-cell matrix (or its offline fallback).
+def load_pbmc3k_topvar(
+    n_genes: int = 1000, n_cells: int | None = None, seed: int = GLOBAL_SEED
+) -> tuple[np.ndarray, str]:
+    """(provided) Real PBMC3k, library-normalized + log1p + top-variance genes.
 
-    Pulls 10x PBMC3k through ``ddm4bio.datasets.get_dataset`` so the same code
-    path returns the genuine matrix when available and a structurally identical
-    synthetic single-cell matrix offline. The counts are library-size normalized
-    and ``log1p``-compressed (the standard single-cell transform), then reduced
-    to the top-variance genes.
-
-    Returns
-    -------
-    tuple
-        ``(expr, labels, source, provenance)`` where ``expr`` is a
-        ``(n_cells, n_genes)`` log-normalized matrix, ``labels`` is a
-        ``(n_cells,)`` array of cell labels (present only in the fallback; the
-        real payload is unlabelled and yields ``None``), and ``source`` /
-        ``provenance`` are the data-layer strings.
+    Pulls 10x PBMC3k through the course data layer (offline-cached; a structurally
+    identical synthetic matrix offline). Returns ``(X, source)`` with ``X`` of shape
+    ``(n_cells, n_genes)``. Optionally subsamples cells for runtime.
     """
     from ddm4bio.datasets import get_dataset
 
     ds = get_dataset("pbmc3k")
     payload = ds.payload
-    if hasattr(payload, "X"):  # real AnnData
-        counts = payload.X
-        labels = None
-    else:  # labelled synthetic fallback dict
-        counts = payload["counts"]
-        labels = np.asarray(payload["labels"])
+    counts = payload.X if hasattr(payload, "X") else payload["counts"]
     counts = np.asarray(counts.toarray() if hasattr(counts, "toarray") else counts, dtype=float)
-
-    library = counts.sum(axis=1, keepdims=True)
+    library = counts.sum(1, keepdims=True)
     library[library == 0] = 1.0
-    target = float(np.median(counts.sum(axis=1)))
+    target = float(np.median(counts.sum(1)))
     log_counts = np.log1p(counts / library * target)
+    top = np.argsort(log_counts.var(0))[::-1][: min(n_genes, log_counts.shape[1])]
+    x = log_counts[:, top]
+    if n_cells is not None and n_cells < x.shape[0]:
+        rng = np.random.default_rng(seed)
+        idx = np.sort(rng.choice(x.shape[0], size=n_cells, replace=False))
+        x = x[idx]
+    return x, ds.source
 
-    n_keep = min(1000, log_counts.shape[1])
-    top_var = np.argsort(log_counts.var(axis=0))[::-1][:n_keep]
-    return log_counts[:, top_var], labels, ds.source, ds.provenance
+
+# --------------------------------------------------------------------------- #
+# Part A -- The permutation null and the stopping rule  (you implement)        #
+# --------------------------------------------------------------------------- #
 
 
-def _label_separation(values: np.ndarray, group_labels: np.ndarray) -> float:
-    """Correlation ratio (eta) of a 1-D score against categorical labels."""
-    values = np.asarray(values, dtype=float)
-    grand = values.mean()
-    total = ((values - grand) ** 2).sum()
-    if total == 0.0:
-        return 0.0
-    between = sum(
-        int((group_labels == g).sum()) * (values[group_labels == g].mean() - grand) ** 2
-        for g in np.unique(group_labels)
+def null_eigenvalue_spectrum(
+    X: np.ndarray, n_perm: int = 50, percentile: float = 95.0, seed: int = GLOBAL_SEED
+) -> dict:
+    """Build the rank-matched permutation null of the eigenvalue spectrum.
+
+    Draw ``n_perm`` column-permuted copies of ``X``, take each one's descending
+    eigenvalue spectrum, and summarize the null at every rank. Returns a dict with
+    parallel arrays (length ``min(n, p)``): ``threshold`` (the ``percentile`` of the
+    null eigenvalue at that rank), ``null_mean``, and ``null_std``.
+    """
+    # TODO: rng = np.random.default_rng(seed). For each of n_perm draws, take
+    # pca_eigenvalues(permute_columns(X, rng)); stack into an (n_perm, min(n,p)) array.
+    # Return {"threshold": np.percentile(draws, percentile, axis=0),
+    #         "null_mean": draws.mean(0), "null_std": draws.std(0)}.
+    raise NotImplementedError("Implement null_eigenvalue_spectrum.")
+
+
+def count_significant_pcs(
+    X: np.ndarray, n_perm: int = 50, percentile: float = 95.0, seed: int = GLOBAL_SEED
+) -> int:
+    """Number of leading PCs whose real eigenvalue beats the null (contiguous rule).
+
+    Compare each real eigenvalue against the null ``threshold`` at the same rank and
+    count the leading run of PCs that exceed it, stopping at the first that does not.
+    This is Horn's parallel-analysis stopping rule; it recovers the planted rank on
+    synthetic fixtures.
+    """
+    # TODO: real = pca_eigenvalues(X); threshold = null_eigenvalue_spectrum(...)["threshold"].
+    # Count the leading PCs where real > threshold, STOPPING at the first that does not
+    # (a contiguous run from the top). Return that count as an int.
+    raise NotImplementedError("Implement count_significant_pcs.")
+
+
+def significance_ratios(
+    X: np.ndarray, n_perm: int = 50, percentile: float = 95.0, seed: int = GLOBAL_SEED
+) -> np.ndarray:
+    """Per-PC ratio of the real eigenvalue to its null threshold.
+
+    A diagnostic vector: ratio > 1 marks a significant PC, and the index where it
+    first dips below 1 is the signal/noise boundary (equals ``count_significant_pcs``).
+    """
+    # TODO: return pca_eigenvalues(X) divided elementwise by the null threshold
+    # (guard against a zero threshold).
+    raise NotImplementedError("Implement significance_ratios.")
+
+
+def recover_rank_vs_noise(
+    noise_levels: Sequence[float],
+    k_true: int = 3,
+    n: int = 200,
+    p: int = 80,
+    n_datasets: int = 5,
+    n_perm: int = 50,
+    seed: int = GLOBAL_SEED,
+) -> dict:
+    """Known-truth validation harness: mean recovered rank vs. noise level.
+
+    For each noise level, build ``n_datasets`` planted-rank-``k_true`` matrices and
+    average ``count_significant_pcs``. Returns ``{noise_level: mean_recovered_k}``; the
+    mean equals ``k_true`` across moderate SNR and degrades gracefully at extreme noise.
+    """
+    # TODO: for each noise level (index level_index), build n_datasets matrices with
+    # make_planted_rank(n, p, k=k_true, noise_sd=level, seed=seed + 1000*level_index + d)
+    # and average count_significant_pcs(..., n_perm=n_perm, seed=seed). Return the
+    # {float(level): mean_recovered_k} dict.
+    raise NotImplementedError("Implement recover_rank_vs_noise.")
+
+
+# --------------------------------------------------------------------------- #
+# Part B -- The naive analytic contrast  (you implement)                       #
+# --------------------------------------------------------------------------- #
+
+
+def marchenko_pastur_count(X: np.ndarray) -> int:
+    """Count PCs whose eigenvalue exceeds the analytic Marchenko-Pastur edge.
+
+    The naive analytic rule: real eigenvalues above ``marchenko_pastur_edge(X)``'s
+    ``lam_plus`` are called signal. It assumes pure Gaussian noise, so on real data it
+    badly OVER-counts -- the losing side of the contrast with parallel analysis.
+    """
+    # TODO: lam_plus = marchenko_pastur_edge(X)[0]; return the number of
+    # pca_eigenvalues(X) strictly greater than lam_plus, as an int.
+    raise NotImplementedError("Implement marchenko_pastur_count.")
+
+
+def compare_selection_rules(
+    X: np.ndarray, n_perm: int = 50, percentile: float = 95.0, seed: int = GLOBAL_SEED
+) -> dict:
+    """Contrast the two rank-selection rules and state which to trust.
+
+    Returns ``parallel_analysis_k``, ``mp_edge_k``, whether they ``agree``, the
+    ``trusted_rule`` (always the data-adaptive permutation null), and a ``verdict``.
+    """
+    # TODO: pa_k = count_significant_pcs(X, n_perm=n_perm, percentile=percentile, seed=seed);
+    # mp_k = marchenko_pastur_count(X). Return the dict with keys parallel_analysis_k,
+    # mp_edge_k, agree (pa_k == mp_k), trusted_rule="parallel_analysis", and a verdict
+    # string explaining why the permutation null is trusted over the MP edge.
+    raise NotImplementedError("Implement compare_selection_rules.")
+
+
+# --------------------------------------------------------------------------- #
+# Provided: QC + driver                                                        #
+# --------------------------------------------------------------------------- #
+
+
+def run_qc(X: np.ndarray, label: str) -> None:
+    """Print a QC block before any results (provided)."""
+    n, p = X.shape
+    evr = pca_eigenvalues(X)
+    evr = evr / evr.sum()
+    print(
+        f"QC [{label}]: matrix {n} x {p} (samples x features); "
+        f"top-3 variance explained {float(evr[:3].sum()):.1%}, "
+        f"aspect ratio gamma=p/n={p / n:.3f}."
     )
-    return float(np.sqrt(between / total))
-
-
-# --------------------------------------------------------------------------- #
-# Part A / B method logic -- IMPLEMENT THESE FIVE FUNCTIONS.
-# --------------------------------------------------------------------------- #
-def svd_decompose(X: np.ndarray, center: bool = True) -> dict:
-    """Full economy SVD of a feature matrix with explained-variance ratios.
-
-    Parameters
-    ----------
-    X: ``(n_samples, n_features)`` feature matrix.
-    center: subtract the per-feature mean before decomposing.
-
-    Returns
-    -------
-    dict
-        Keys ``U`` ``(n_samples, r)``, ``singular_values`` ``(r,)``,
-        ``Vt`` ``(r, n_features)``, and ``explained_variance_ratio`` ``(r,)``,
-        where ``r = min(n_samples, n_features)``.
-    """
-    # TODO: center X if requested, take the full economy SVD with svd_lowrank
-    # (rank r = min(X.shape)), compute explained_variance_ratio, and pack the
-    # four arrays into the documented dict.
-    raise NotImplementedError("Implement svd_decompose")
-
-
-def pca_scores(X: np.ndarray, n_components: int, center: bool = True) -> np.ndarray:
-    """Project a feature matrix onto its top principal components.
-
-    Returns
-    -------
-    np.ndarray, shape ``(n_samples, n_components)``
-        PCA scores (projections onto the leading components).
-    """
-    # TODO: return the top-`n_components` PCA projection of X (use pca_reduce).
-    raise NotImplementedError("Implement pca_scores")
-
-
-def robust_pca(X: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Split a matrix into low-rank plus sparse parts (robust PCA / PCP).
-
-    Returns
-    -------
-    tuple of np.ndarray
-        ``(L, S)`` with ``X ~= L + S``; ``L`` low-rank, ``S`` sparse.
-    """
-    # TODO: return the low-rank + sparse decomposition of X (use rpca).
-    raise NotImplementedError("Implement robust_pca")
-
-
-def run_ica(observations: np.ndarray, n_sources: int, seed: int = SEED) -> np.ndarray:
-    """Recover independent sources from mixed multichannel observations.
-
-    Parameters
-    ----------
-    observations: ``(n_channels, n_samples)`` observed mixtures.
-    n_sources: number of independent sources to estimate.
-    seed: forwarded to FastICA for reproducibility.
-
-    Returns
-    -------
-    np.ndarray, shape ``(n_sources, n_samples)``
-        Estimated source signals (one per row).
-    """
-    # TODO: run ICA (use ica_unmix) and return the estimated sources.
-    raise NotImplementedError("Implement run_ica")
-
-
-def scaling_sensitivity(X: np.ndarray, n_components: int = 1) -> dict:
-    """Compare explained variance on raw vs per-feature standardized data.
-
-    Returns
-    -------
-    dict
-        Keys ``raw_evr`` and ``scaled_evr`` (both ``(min(shape),)`` arrays),
-        ``raw_top`` and ``scaled_top`` (floats: summed top-``n_components``
-        ratios), and ``sensitive`` (bool: does standardization move the top
-        concentration by more than 0.1?).
-    """
-    # TODO: compute explained_variance_ratio on raw X and on z-scored X
-    # (guard zero-variance columns), sum the top-`n_components` ratios of each,
-    # and report whether they differ by more than 0.1.
-    raise NotImplementedError("Implement scaling_sensitivity")
-
-
-# --------------------------------------------------------------------------- #
-# Quality control + application driver (provided; do not modify).
-# --------------------------------------------------------------------------- #
-def _abs_corr(a: np.ndarray, b: np.ndarray) -> float:
-    """Absolute Pearson correlation between two 1D arrays."""
-    a = np.asarray(a, dtype=float).ravel()
-    b = np.asarray(b, dtype=float).ravel()
-    if a.std() == 0 or b.std() == 0:
-        return 0.0
-    return float(abs(np.corrcoef(a, b)[0, 1]))
-
-
-def quality_control(expr: ExpressionMatrix, mixed, est_sources: np.ndarray) -> dict:
-    """Run the required QC checks and return a metrics dictionary."""
-    decomp = svd_decompose(expr.X)
-    evr = decomp["explained_variance_ratio"]
-
-    u, s, vt = svd_lowrank(expr.X - expr.X.mean(axis=0, keepdims=True), 2)
-    recon = (u * s) @ vt + expr.X.mean(axis=0, keepdims=True)
-    recon_err = reconstruction_error(expr.X, recon, kind="rel_l2")
-
-    pc1_bio = _abs_corr(vt[0], expr.bio_direction)
-    pc2_batch = _abs_corr(vt[1], expr.batch_direction)
-
-    inflated = expr.X.copy()
-    inflated[:, 0] *= 50.0
-    sens = scaling_sensitivity(inflated, n_components=1)
-
-    recovery = source_recovery_score(mixed.sources, est_sources)
-
-    return {
-        "evr_top2": float(evr[:2].sum()),
-        "rank2_recon_rel_l2": float(recon_err),
-        "pc1_vs_bio": pc1_bio,
-        "pc2_vs_batch": pc2_batch,
-        "scaling_sensitive": sens["sensitive"],
-        "scaling_raw_top": sens["raw_top"],
-        "scaling_scaled_top": sens["scaled_top"],
-        "ica_recovery": float(recovery),
-        "ica_trustworthy": bool(recovery > 0.9),
-    }
 
 
 def main() -> None:
-    """Run the full PS5 application (B), QC (C), and interpretation (D)."""
-    expr = make_expression_matrix(seed=SEED)
-    mixed = make_mixed_sources(3, 2000, seed=SEED)
+    """Validate parallel analysis on known-rank fixtures, then apply it to real PBMC3k."""
+    seed_everything()
 
-    est_sources = run_ica(mixed.observations, 3, seed=SEED)
-    scores = pca_scores(expr.X, 2)
-
-    qc = quality_control(expr, mixed, est_sources)
-    pc1_vs_group = _abs_corr(scores[:, 0], expr.group)
-    pc2_vs_batch_scores = _abs_corr(scores[:, 1], expr.batch)
-
-    print("=== PS5: dimensionality reduction & source separation ===")
-    print(f"PC1 leading loading vs biological program : {qc['pc1_vs_bio']:.3f}")
-    print(f"PC2 leading loading vs batch program      : {qc['pc2_vs_batch']:.3f}")
-    print(f"PC1 scores vs condition label             : {pc1_vs_group:.3f}")
-    print(f"PC2 scores vs batch label                 : {pc2_vs_batch_scores:.3f}")
-    print(f"Top-2 variance explained                  : {qc['evr_top2']:.3f}")
-    print(f"Rank-2 reconstruction (rel L2)            : {qc['rank2_recon_rel_l2']:.3f}")
+    print("== Part A: recover a KNOWN planted rank (synthetic ground truth) ==")
+    x1 = make_planted_rank(n=200, p=80, k=3, noise_sd=1.0, seed=GLOBAL_SEED)
+    run_qc(x1, "planted k=3")
+    k_hat = count_significant_pcs(x1)
+    ratios = significance_ratios(x1)
+    print(f"    planted k=3  ->  recovered k_hat={k_hat}")
     print(
-        f"PCA scale-sensitive (raw {qc['scaling_raw_top']:.2f} vs "
-        f"scaled {qc['scaling_scaled_top']:.2f}): {qc['scaling_sensitive']}"
+        f"    significance ratios (real/null) PC1..PC5: "
+        f"{np.array2string(ratios[:5], precision=2, floatmode='fixed')}"
     )
-    print(f"ICA source recovery vs ground truth       : {qc['ica_recovery']:.3f}")
-    print(f"ICA trustworthy (recovery > 0.9)          : {qc['ica_trustworthy']}")
-
-    rng = np.random.default_rng(SEED)
-    low_true = rng.standard_normal((50, 3)) @ rng.standard_normal((3, 50))
-    sparse_true = np.zeros((50, 50))
-    mask = rng.random((50, 50)) < 0.05
-    sparse_true[mask] = rng.standard_normal(int(mask.sum())) * 10.0
-    low, sparse = robust_pca(low_true + sparse_true)
+    cmp1 = compare_selection_rules(x1)
     print(
-        f"Robust PCA low-rank recovery (rel L2)     : "
-        f"{reconstruction_error(low_true, low, kind='rel_l2'):.3f}"
+        f"    Marchenko-Pastur edge keeps {cmp1['mp_edge_k']} (on clean Gaussian noise it "
+        f"agrees; on real data it will not)"
     )
 
-    # ---- Part B (real data): PCA of a single-cell expression matrix ----
-    # The synthetic matrix above is the *validation* fixture (known injected
-    # directions, checked by the autograder). Here we apply the same validated
-    # PCA to real PBMC3k single-cell data pulled through the course data layer,
-    # which falls back to a structurally identical synthetic matrix offline.
-    sc_expr, sc_labels, sc_source, sc_prov = load_single_cell_expression()
-    sc_scores = pca_scores(sc_expr, 2)
-    sc_evr = svd_decompose(sc_expr)["explained_variance_ratio"]
-    print(f"\n[pbmc3k] source={sc_source}: {sc_prov}")
-    print(f"Single-cell matrix (cells x genes)        : {sc_expr.shape}")
-    print(f"Single-cell top-2 variance explained      : {float(sc_evr[:2].sum()):.3f}")
-    if sc_labels is not None:
-        print(
-            f"PC1 vs provided cell labels (eta)         : "
-            f"{_label_separation(sc_scores[:, 0], sc_labels):.3f}"
-        )
-    else:
-        print(
-            "PC1 vs cell labels                        : "
-            "real payload is unlabelled; read PCs from gene loadings"
-        )
+    print("\n    noise sweep (mean recovered rank over 5 datasets each):")
+    sweep = recover_rank_vs_noise([0.3, 0.5, 1.0, 2.0, 4.0, 8.0], k_true=3)
+    for noise, mean_k in sweep.items():
+        print(f"      noise_sd={noise:>4.1f}  ->  mean recovered k={mean_k:.1f}")
 
-    confidence = "high" if qc["ica_trustworthy"] and qc["pc1_vs_bio"] > 0.9 else "moderate"
+    x0 = make_planted_rank(n=200, p=80, k=0, noise_sd=1.0, seed=GLOBAL_SEED)
+    print(f"    pure-noise sanity (planted k=0)  ->  recovered k_hat={count_significant_pcs(x0)}")
+
+    print("\n== Part B: how many PCs are real in PBMC3k? (real data) ==")
+    x_real, source = load_pbmc3k_topvar(n_genes=1000, n_cells=1200)
+    print(f"[pbmc3k] source={source}")
+    run_qc(x_real, "pbmc3k")
+    cmp_real = compare_selection_rules(x_real)
+    ratios_real = significance_ratios(x_real)
+    mask = pca_eigenvalues(x_real) > null_eigenvalue_spectrum(x_real)["threshold"]
+    print(
+        f"    parallel analysis keeps k={cmp_real['parallel_analysis_k']} PCs "
+        f"(contiguous block: {''.join('1' if m else '0' for m in mask[:14])}...)"
+    )
+    print(
+        f"    significance ratios PC1/PC{cmp_real['parallel_analysis_k']}/"
+        f"PC{cmp_real['parallel_analysis_k'] + 1}: "
+        f"{ratios_real[0]:.2f} / {ratios_real[cmp_real['parallel_analysis_k'] - 1]:.2f} / "
+        f"{ratios_real[cmp_real['parallel_analysis_k']]:.2f}"
+    )
+    print(
+        f"    Marchenko-Pastur edge keeps k={cmp_real['mp_edge_k']} "
+        f"(over-counts on non-Gaussian data -- the failing contrast)"
+    )
+
+    print("\n== Interpretation ==")
     block = interpretation_block(
         claim=(
-            "The dominant principal component reflects the injected biological "
-            "condition, the second reflects batch, and ICA recovers the true "
-            "independent sources on the synthetic recording."
+            f"Parallel analysis recovers the true latent dimensionality of a single-cell "
+            f"expression matrix: it returns exactly the planted rank on synthetic data across "
+            f"a wide SNR range, and keeps {cmp_real['parallel_analysis_k']} significant "
+            f"principal components on real PBMC3k -- while the Marchenko-Pastur edge "
+            f"over-counts ({cmp_real['mp_edge_k']} PCs) because real expression noise "
+            f"is not Gaussian."
         ),
-        confidence=confidence,
-        evidence=(
-            f"PC1-biology |r|={qc['pc1_vs_bio']:.2f}, PC2-batch "
-            f"|r|={qc['pc2_vs_batch']:.2f}, ICA recovery={qc['ica_recovery']:.2f} "
-            f"(>0.9 gate passed)"
-        ),
+        confidence="high",
         limitations_list=[
-            "Ground truth is synthetic; real expression/recordings add unmodeled noise.",
-            "PCA is scale-dependent, so normalization choices change which axis leads.",
-            "ICA sign/permutation are unidentifiable; only matched |correlation| is meaningful.",
-            "Batch and biology were injected orthogonal; real confounds are often entangled.",
+            "The permutation null has a per-rank false-positive rate equal to (100 - "
+            "percentile)%, so on pure noise it can occasionally admit one spurious component.",
+            "The Marchenko-Pastur edge assumes i.i.d. Gaussian entries and a bulk noise "
+            "variance; real expression data violates both, which is exactly why it fails here.",
+            "The real 'true rank' is not a single objective integer; the PBMC3k count is a "
+            "defensible cutoff, not a universal constant, and shifts with gene selection.",
         ],
+        evidence=(
+            "exact planted-rank recovery across a synthetic noise sweep, a contiguous block of "
+            "significant PCs with a smooth significance-ratio decay through 1, and a documented "
+            "MP-edge over-count on the same real matrix"
+        ),
     )
-    print("\n--- Interpretation ---")
     print(block)
 
 

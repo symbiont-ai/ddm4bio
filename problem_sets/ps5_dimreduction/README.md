@@ -1,123 +1,88 @@
-# PS5 — Dimensionality Reduction and Blind Source Separation
+# PS5 — Signal or Noise? A Significance Test for the Rank
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/symbiont-ai/ddm4bio/blob/main/problem_sets/ps5_dimreduction/ps5_colab.ipynb)
 
 **Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
 
-**Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Ch. 15
-(the singular value decomposition and principal component analysis) and Ch. 16
-(independent component analysis and image/signal separation). Read for concepts
-and derive your own code — do not copy any listing.
+**Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapters 15–16
+(SVD/PCA and independent component analysis), plus any introduction to Horn's
+parallel analysis and the Marchenko–Pastur law.
 
-Low-dimensional structure is the workhorse of quantitative biology: a handful of
-latent axes often explain most of the variation in an expression matrix, a
-neural recording, or an imaging stack. But "a component" is not automatically "a
-mechanism." The same math that surfaces a real biological program will just as
-happily surface a batch artifact, and a scale choice you made three steps
-earlier can silently decide which one leads. This problem set asks you to run
-the three core linear-decomposition tools, and — more importantly — to build the
-habit of checking a method against *known ground truth* before you believe
-anything it tells you about real data.
+Week 5 computes a PCA/SVD spectrum and **eyeballs a scree plot** to guess how many
+components matter. This problem set replaces the guess with a principled stopping
+rule — **Horn's parallel analysis**: permute each gene column independently to build a
+rank-matched *noise* null, then keep only the leading components whose real eigenvalue
+beats the null. You will recover the latent **dimensionality of the feature space**
+with a statistical test the lesson never covers, and expose why the popular analytic
+shortcut (the Marchenko–Pastur edge) is untrustworthy on real, non-Gaussian data.
 
-You will implement five functions and wire them into an analysis that is graded
-on both correctness and honesty.
+> This is a **linear-decomposition** task, not a clustering one: the counted object is
+> the number of significant *principal components* (continuous feature-space
+> directions), chosen by a spectral permutation null — not a number of sample clusters.
+
+The decomposition mechanics (`pca_eigenvalues`), the null draw (`permute_columns`),
+the MP edge (`marchenko_pastur_edge`), and the data (`make_planted_rank`,
+`load_pbmc3k_topvar`) are **provided** — this problem set is about the significance
+test, not the SVD. Fill in the functions marked `# TODO` in `student/ps5.py`. The
+autograder checks each on small seeded matrices of known rank, so keep the signatures
+exactly as given.
 
 ## Data
 
-The ground-truth fixtures are synthetic, offline, and deterministic. The
-real-data PCA application streams a single-cell matrix through the course data
-layer, which caches the genuine download and falls back to a structurally
-identical synthetic matrix when offline — so this too runs with no network.
+- **Planted-rank matrices (synthetic, known ground truth)** — `make_planted_rank(n, p,
+  k, noise_sd, seed)` builds `X = scores @ loadings + noise`, whose true number of
+  signal components is exactly `k` (0 = pure noise). Because scoring rank *recovery*
+  needs the exact truth, the validation fixtures are synthetic by design.
+- **Real PBMC3k** — `load_pbmc3k_topvar()` loads the 10x PBMC3k single-cell matrix via
+  `get_dataset("pbmc3k")`, library-normalized + log1p + top-variance genes. Choosing
+  how many PCs to keep is the first decision in almost every scRNA-seq pipeline.
 
-- **Synthetic expression matrix** — `make_expression_matrix()` (provided in the
-  template) builds an `(n_samples, n_genes)` matrix with two orthogonal gene
-  programs injected on top of Gaussian noise: a strong *biological* program tied
-  to a binary condition label, and a weaker *batch* program tied to a nuisance
-  label. Because you know the true directions and labels, you can measure
-  exactly how well PCA recovers them. This is the PCA **validation** fixture.
-- **Real single-cell matrix** — `get_dataset("pbmc3k")`
-  (`ddm4bio.datasets.get_dataset`) returns the 10x Genomics PBMC3k assay as an
-  `AnnData` (real; use `.X` for the counts) or a labelled fallback `dict` with
-  `counts`/`labels`/`gene_names` (offline). `load_single_cell_expression()`
-  (provided) log1p-normalizes it and selects the top-variance genes; the
-  application applies the same validated PCA to it and prints `ds.source` /
-  `ds.provenance` so you can see whether you got real or fallback data.
-- **Synthetic mixed sources** — `ddm4bio.datasets.synthetic.make_mixed_sources`
-  returns a `MixedSources` fixture: known independent sources (sine, sawtooth,
-  square, then Laplacian sources), a known mixing matrix, and the observed
-  multichannel mixtures. This is your ICA ground truth.
-- **Robust-PCA construction** — a low-rank matrix plus sparse gross corruptions,
-  built locally from a seeded RNG.
+Seed everything through `ddm4bio.seed_everything()` (called in `main`).
 
-All ground truth (true directions, labels, sources, mixing) is available, so
-every claim you make can be checked against an exact answer.
+## Part A — The permutation null and the stopping rule
 
-## Part A — Method
+Validate on synthetic matrices of known planted rank. Implement:
 
-Implement the linear-decomposition machinery on top of the `ddm4bio` wrappers:
+- `null_eigenvalue_spectrum(X, n_perm, percentile, seed)` — the rank-matched
+  permutation null: per-rank `threshold`, `null_mean`, `null_std`.
+- `count_significant_pcs(X, n_perm, percentile, seed)` — the contiguous parallel-
+  analysis stopping rule; recovers the planted rank.
+- `significance_ratios(X, n_perm, percentile, seed)` — per-PC real/null ratio (crosses
+  1 at the significant-PC count).
+- `recover_rank_vs_noise(noise_levels, k_true, ...)` — the known-truth validation
+  harness: mean recovered rank vs. noise, flat at `k_true` then degrading gracefully.
 
-1. `svd_decompose(X, center=True)` — compute the (optionally centered) economy
-   SVD of a feature matrix and return `U`, the singular values, `Vt`, and the
-   explained-variance ratio per component. Be ready to interpret the singular
-   values with a **scree plot** and to explain what the right singular vectors
-   (`Vt` rows) mean as gene programs / spatial modes.
-2. `robust_pca(X)` — separate a matrix into a **low-rank** part plus a
-   **sparse** part (principal component pursuit). State plainly what each part
-   is meant to capture.
-3. `run_ica(observations, n_sources, seed)` — recover independent sources from
-   mixed multichannel observations. Remember that ICA is unidentifiable up to
-   sign and permutation of the sources.
+## Part B — The naive analytic contrast
 
-## Part B — Application
+- `marchenko_pastur_count(X)` — count PCs above the analytic MP edge.
+- `compare_selection_rules(X, ...)` — contrast the two rules and state which to trust.
+  On clean Gaussian-noise synthetic data they agree; on real PBMC3k the MP edge
+  over-counts (its Gaussian assumption breaks), so the data-adaptive permutation null
+  is trusted.
 
-1. **PCA of the expression matrix.** Project the synthetic expression matrix
-   onto its leading components with `pca_scores`. Relate the leading components
-   back to the injected structure: correlate the PC1 loading with the biological
-   program and the PC2 loading with the batch program, and correlate the scores
-   with the condition and batch labels. Report which axis is biology and which
-   is batch, and how confidently you can tell them apart.
-2. **ICA of a multichannel recording.** Run `run_ica` on the mixed-sources
-   observations and recover the underlying independent sources.
+## Quality control & interpretation (required)
 
-## Part C — Quality control *(required)*
+The provided `run_qc` reports the matrix shape, top-3 variance explained, and aspect
+ratio γ = p/n — printed before any rank result. The provided `main` closes with a
+`ddm4bio.interpret.interpretation_block`: state how strongly the synthetic recovery and
+the PBMC3k contiguous block support the claim, at an honest confidence level, and name
+the real limitations — the permutation test's per-rank false-positive rate, the MP
+edge's Gaussian assumption, and that a real "true rank" is not a single objective
+integer (it shifts with gene selection).
 
-QC is not optional garnish here; it is the point of the assignment.
+## Files
 
-1. **Variance explained and reconstruction.** Report the fraction of variance in
-   the top components and the relative-L2 error of a rank-2 reconstruction of
-   the expression matrix. A component that explains little variance and barely
-   changes the reconstruction is not load-bearing.
-2. **PCA sensitivity to scaling / normalization.** Using `scaling_sensitivity`,
-   show that inflating a single high-variance feature can hijack the leading
-   component, and that per-feature standardization changes the answer. Decide
-   and justify whether your PCA should run on raw or standardized data.
-3. **ICA recovery vs ground truth first.** Compute the max-matched source
-   recovery score on the synthetic mixture with
-   `ddm4bio.methods.validation.source_recovery_score`. **Do not trust ICA on any
-   real recording until this score clears 0.9 on the synthetic case.** This gate
-   is the whole discipline: validate on known truth, then extrapolate.
+- `student/ps5.py` — your working file; fill in every `# TODO`.
+- `rubric.md` — how this problem set is graded.
+- `ps5_colab.ipynb` — one-click Google Colab launcher (badge at the top).
+- The reference solution and the autograder are provided through the course and
+  run automatically by GitHub Classroom.
 
-## Part D — Interpretation and confidence
+## Running
 
-Close with an interpretation block built via
-`ddm4bio.interpret.interpretation_block(...)`:
+```bash
+python student/ps5.py          # runs until the first unimplemented function
+```
 
-- **How much structure is real vs batch?** Given the loading/score correlations
-  and the variance explained, argue which leading component reflects genuine
-  biology and which reflects batch, and how separable they are.
-- **Is the ICA result physiologically meaningful?** State a confidence level
-  (`low` / `moderate` / `high`) justified by the recovery score against ground
-  truth, and name the honest limitations — synthetic-vs-real gap, scale
-  dependence of PCA, the sign/permutation ambiguity of ICA, and the fact that
-  the injected batch and biology were orthogonal by construction while real
-  confounds usually are not.
-
-## What to submit
-
-Complete the five `# TODO` functions in `student/ps5.py`. The data loaders, QC
-driver, and interpretation block are already wired — you implement only the
-method logic. Running `python student/ps5.py` should print the analysis, QC
-metrics, and interpretation block once your functions are done. You can also
-work in the browser with no local setup — use the Colab badge at the top of this
-page. The autograder checks interfaces and ground-truth thresholds, and runs
-automatically when you push to GitHub Classroom.
+To work in the browser instead, click the Colab badge at the top of this file.
+The autograder runs automatically when you push to GitHub Classroom.
