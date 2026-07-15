@@ -1,5 +1,9 @@
 # PS3 — Machine Learning and Generalization
 
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/symbiont-ai/ddm4bio/blob/main/problem_sets/ps3_ml_generalization/ps3_colab.ipynb)
+
+**Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
+
 **Reading:** Kutz, *Data-Driven Modeling & Scientific Computation for the Life
 Sciences*, Chapter 6 (neural networks) and Chapter 13 (regression, model
 selection, and cross-validation).
@@ -14,8 +18,9 @@ train/validation/test split, calibration, and a permutation test — that lets y
 say *how confident* you should be, and why.
 
 You will implement your functions in `student/ps3.py`. The public function
-signatures are fixed; the autograder in `tests/test_ps3.py` imports them by name
-and checks both their return shapes and their performance against thresholds.
+signatures are fixed; the autograder imports them by name and checks both their
+return shapes and their performance against thresholds; it runs automatically
+when you push to GitHub Classroom.
 
 ## Data (everything offline)
 
@@ -33,7 +38,7 @@ No downloads, no network, no credentials.
   shape** (`ds.payload["X"]` a 303×13 table, `ds.payload["y"]` a binary label);
   passing `download=True` fetches and caches the real CSV instead. The provided
   `main()` prints `ds.source`/`ds.provenance` so you always see which you got.
-- The autograder in `tests/` validates the evaluation machinery against the
+- The course autograder validates the evaluation machinery against the
   bundled, well-separated `load_breast_cancer` fixture (569 samples, 30
   features), which also loads offline; `load_clinical_data()` is provided for it.
 
@@ -119,5 +124,6 @@ shape). In your own words, answer:
 ## What to submit
 
 Only edit `student/ps3.py`. Run it directly (`python student/ps3.py`) to see the
-full pipeline once your TODOs are filled in, and run the autograder with
-`pytest tests/`.
+full pipeline once your TODOs are filled in, or work in the browser via the Colab
+badge at the top. The autograder runs automatically when you push to GitHub
+Classroom.

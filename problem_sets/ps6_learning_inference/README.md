@@ -1,5 +1,9 @@
 # PS6 — Unsupervised Discovery and Supervised Inference
 
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/symbiont-ai/ddm4bio/blob/main/problem_sets/ps6_learning_inference/ps6_colab.ipynb)
+
+**Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
+
 **Theme:** finding structure you did not know was there, then building a model
 that predicts something you care about — and, crucially, learning to distrust
 both until you have stress-tested them.

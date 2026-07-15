@@ -1,5 +1,9 @@
 # Problem Set 1 — Eigen-Recognition: Linear Systems and the SVD
 
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/symbiont-ai/ddm4bio/blob/main/problem_sets/ps1_eigen_recognition/ps1_colab.ipynb)
+
+**Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
+
 **Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 2
 (linear systems, Gaussian elimination / LU, iterative solvers, and the singular
 value decomposition). Skim the sections on conditioning and on low-rank
@@ -14,8 +18,8 @@ peripheral-blood-cell microscopy crops (BloodMNIST): our literal "eigen-cells."
 
 Everything is small, deterministic, and runs offline. Fill in the method logic
 in `student/ps1.py`; the imports, data loading, and quality-control plumbing are
-already wired for you. The autograder in `tests/` checks both the interfaces and
-numerical thresholds.
+already wired for you. The autograder checks both the interfaces and
+numerical thresholds, and runs automatically when you push to GitHub Classroom.
 
 ## Data
 
@@ -100,14 +104,17 @@ actually produced.
 
 ## Files
 
-- `solution/ps1_solution.py` — reference implementation (instructor copy).
 - `student/ps1.py` — your working file; fill in every `# TODO`.
-- `tests/test_ps1.py` — autograder (interfaces + numerical thresholds).
 - `rubric.md` — how this problem set is graded.
+- `ps1_colab.ipynb` — one-click Google Colab launcher (badge at the top).
+- The reference solution and the autograder (interfaces + numerical thresholds)
+  are provided through the course and run automatically by GitHub Classroom.
 
 ## Running
 
 ```bash
 python student/ps1.py          # runs until the first unimplemented function
-pytest tests/test_ps1.py -q    # autograder
 ```
+
+To work in the browser instead, click the Colab badge at the top of this file.
+The autograder runs automatically when you push to GitHub Classroom.

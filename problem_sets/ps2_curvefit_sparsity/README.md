@@ -1,5 +1,9 @@
 # PS2 — Curve Fitting, Regularized Differentiation, and Sparsity
 
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/symbiont-ai/ddm4bio/blob/main/problem_sets/ps2_curvefit_sparsity/ps2_colab.ipynb)
+
+**Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
+
 **Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 4
 (least-squares and nonlinear curve fitting, regression, the coefficient of
 determination) and Chapter 5 (sparsity, the Lasso / L1 regularization, and
@@ -116,9 +120,10 @@ you can go. Overstating confidence is the failure mode this part exists to catch
 
 ```bash
 python student/ps2.py                 # import cleanly; stop at the first TODO
-python -m pytest tests/test_ps2.py    # the autograder (see the file header)
 ```
 
-The autograder imports the **solution** module by default; for GitHub Classroom
-the import target is swapped to your `student/ps2.py`. Keep your code
-`ruff`-clean under `E, F, I` (line length 100), deterministic, and offline.
+You can also work in the browser: click the **Open in Colab** badge at the top —
+no local setup required. The autograder runs automatically when you push to
+GitHub Classroom, importing your `student/ps2.py`; a reference solution is
+provided through the course. Keep your code `ruff`-clean under `E, F, I` (line
+length 100), deterministic, and offline.

@@ -37,6 +37,10 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# The per-problem-set Colab launcher notebooks embed the student scaffold in a
+# `%%writefile` cell and use notebook magics; they are runnable student assets,
+# not linted library code, so keep them out of the ruff gate.
+extend-exclude = ["problem_sets/**/*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]

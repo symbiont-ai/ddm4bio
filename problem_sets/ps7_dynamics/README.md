@@ -1,5 +1,9 @@
 # PS7 -- Data-Driven Dynamics: DMD, SINDy, and the Kalman Filter
 
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/symbiont-ai/ddm4bio/blob/main/problem_sets/ps7_dynamics/ps7_colab.ipynb)
+
+**Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
+
 **Reading.** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 15
 (dynamic mode decomposition), and Chapters 20-21 (sparse identification of
 nonlinear dynamics and data assimilation / Kalman filtering). Read these before
@@ -125,9 +129,11 @@ fixture does not guarantee clean recovery on field data.
 
 ```bash
 python student/ps7.py            # runs the whole pipeline + prints QC and interpretation
-pytest tests/test_ps7.py         # autograder (interfaces + ground-truth thresholds)
+# push to GitHub Classroom to run the autograder (interfaces + ground-truth thresholds)
 ```
 
-The reference solution lives in `solution/ps7_solution.py`. The autograder
-imports the solution by default; for GitHub Classroom the import target is
-swapped to your `student/ps7.py`.
+You can also work in the browser: click the **Open in Colab** badge at the top -- no local setup required.
+
+A reference solution is provided through the course. The autograder runs
+automatically when you push to GitHub Classroom, where the import target is
+your `student/ps7.py`.

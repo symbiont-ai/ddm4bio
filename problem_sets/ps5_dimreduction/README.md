@@ -1,5 +1,9 @@
 # PS5 — Dimensionality Reduction and Blind Source Separation
 
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/symbiont-ai/ddm4bio/blob/main/problem_sets/ps5_dimreduction/ps5_colab.ipynb)
+
+**Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
+
 **Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Ch. 15
 (the singular value decomposition and principal component analysis) and Ch. 16
 (independent component analysis and image/signal separation). Read for concepts
@@ -113,5 +117,7 @@ Close with an interpretation block built via
 Complete the five `# TODO` functions in `student/ps5.py`. The data loaders, QC
 driver, and interpretation block are already wired — you implement only the
 method logic. Running `python student/ps5.py` should print the analysis, QC
-metrics, and interpretation block once your functions are done. The autograder
-in `tests/test_ps5.py` checks interfaces and ground-truth thresholds.
+metrics, and interpretation block once your functions are done. You can also
+work in the browser with no local setup — use the Colab badge at the top of this
+page. The autograder checks interfaces and ground-truth thresholds, and runs
+automatically when you push to GitHub Classroom.

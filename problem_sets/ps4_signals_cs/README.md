@@ -1,5 +1,9 @@
 # Problem Set 4 — Signals, Time–Frequency Analysis, and Compressed Sensing
 
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/symbiont-ai/ddm4bio/blob/main/problem_sets/ps4_signals_cs/ps4_colab.ipynb)
+
+**Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
+
 **Course:** Data-Driven Modeling & Scientific Computation for the Life Sciences
 **Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 14
 (Fourier and time–frequency analysis, wavelets, and sparsity / compressed
@@ -138,7 +142,10 @@ well-hedged result.
 
 ```bash
 python student/ps4.py          # loads data, runs QC, stops at your first TODO
-pytest tests/test_ps4.py       # autograder (passes against the reference)
 ```
+
+Or work in the browser: click the Colab badge at the top — no local setup
+required. The autograder runs automatically when you push to GitHub Classroom
+(a reference solution is provided through the course).
 
 Everything is seeded and offline; two runs must produce identical numbers.
