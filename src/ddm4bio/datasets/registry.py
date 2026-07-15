@@ -71,6 +71,10 @@ class DatasetSpec:
         Dotted ``"module:function"`` path resolved lazily at load time.
     used_by:
         Tuple of course-unit keys (weeks / problem sets) that use the dataset.
+    loader_opts:
+        Extra keyword arguments forwarded to the loader, so one loader can serve
+        several keys unambiguously (e.g. the MedMNIST subset name). The subset is
+        declared here, explicitly, rather than inferred from ``key``.
     """
 
     key: str
@@ -82,6 +86,7 @@ class DatasetSpec:
     url: str
     loader: str
     used_by: tuple = field(default_factory=tuple)
+    loader_opts: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -122,6 +127,7 @@ DATASET_REGISTRY: dict[str, DatasetSpec] = {
         url="https://medmnist.com/",
         loader="ddm4bio.datasets.medmnist_images:load_medmnist",
         used_by=("wk1", "ps1"),
+        loader_opts={"name": "bloodmnist"},
     ),
     "pathmnist": DatasetSpec(
         key="pathmnist",
@@ -137,6 +143,7 @@ DATASET_REGISTRY: dict[str, DatasetSpec] = {
         url="https://medmnist.com/",
         loader="ddm4bio.datasets.medmnist_images:load_medmnist",
         used_by=("wk6", "ps6"),
+        loader_opts={"name": "pathmnist"},
     ),
     "pbmc3k": DatasetSpec(
         key="pbmc3k",
@@ -345,14 +352,16 @@ def get_dataset(
     module = importlib.import_module(module_name)
     loader = getattr(module, func_name)
 
-    # Forward the registry key so a loader shared across several keys (e.g.
-    # ``load_medmnist`` serving both ``bloodmnist`` and ``pathmnist``) can select
-    # the correct subset instead of relying on a constant default. Loaders that
-    # don't need it absorb ``key`` into their ``**opts`` and ignore it.
+    # Pass the registry key plus any per-spec ``loader_opts`` (e.g. the MedMNIST
+    # subset name), so a loader shared across several keys (``load_medmnist``
+    # serving both ``bloodmnist`` and ``pathmnist``) selects the right subset
+    # EXPLICITLY from the spec rather than inferring it from the key. Caller opts
+    # override spec ``loader_opts``; loaders that don't need these absorb ``key``
+    # and the extra opts into ``**opts`` and ignore them.
     return loader(
         cache_dir=cache_dir,
         download=download,
         prefer_real=prefer_real,
         key=key,
-        **opts,
+        **{**spec.loader_opts, **opts},
     )
