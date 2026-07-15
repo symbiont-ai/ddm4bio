@@ -47,13 +47,15 @@ pip install -e ".[imaging]"     # medmnist, scikit-image, nibabel
 ## Layout
 
 ```
-src/ddm4bio/   shared library (config, qc, viz, methods, datasets, utils)
-notebooks/     16 lecture demos (jupytext-paired) — later phases
-problem_sets/  7 problem sets (student scaffold + solution + tests) — later phases
-capstone/      capstone spec + template — later phases
+src/ddm4bio/   shared library (config, qc, viz, methods, datasets, utils, interpret)
+book/          JupyterBook course site: 8 weekly lessons + syllabus, schedule, references
+problem_sets/  7 problem sets (README + student scaffold + solution + autograder + rubric)
+capstone/      spec, rubric, runnable template, and section linter
 data/          DATA_CARD.md + gitignored raw/ and cache/
-tests/         library unit tests
-docs/          conventions (see METHOD_LABELING.md)
+tests/         library + data-layer unit tests
+scripts/       fetch_data.py — warm the dataset cache
+docs/          conventions (METHOD_LABELING.md, INTERPRETATION.md) + LAUNCH.md runbook
+.github/       CI + GitHub Pages deploy workflows
 ```
 
 ## Conventions

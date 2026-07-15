@@ -35,3 +35,6 @@ data/cache/*
 .coverage.*
 htmlcov/
 coverage.xml
+
+# stray root-level figure artifacts (agents saving plots to CWD)
+/f[0-9].png
