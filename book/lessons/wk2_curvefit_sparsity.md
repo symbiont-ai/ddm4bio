@@ -170,7 +170,7 @@ ax.set_xlabel("Concentration (arb. units, log scale)")
 ax.set_ylabel("Response (% of maximum)")
 ax.set_title("Hill dose-response fit vs. ground truth")
 ax.legend(loc="upper left", fontsize=9)
-fig
+fig;
 ```
 
 **QC: goodness of fit and residual structure.** A good fit is not just close on
@@ -199,7 +199,7 @@ ax.set_xscale("log")
 ax.set_xlabel("Concentration (log scale)")
 ax.set_ylabel("Residual")
 ax.set_title("Residuals vs. dose (should be a structureless band)")
-fig
+fig;
 ```
 
 **QC note.** The RMSE lands close to the 2.5-unit noise we injected, and the
@@ -324,7 +324,7 @@ ax.set_xlabel(f"{dose_col} (log scale)")
 ax.set_ylabel(str(resp_col))
 ax.set_title(f"Hill fit to a real GDSC series ({label})")
 ax.legend(loc="best", fontsize=9)
-fig
+fig;
 ```
 
 The point of this pass is the *transfer*: the estimator we validated on a curve
@@ -398,7 +398,7 @@ axes[1].set_xlabel("t")
 axes[1].set_ylabel("dy/dt")
 axes[1].set_title("Tikhonov regularization recovers the derivative")
 axes[1].legend(loc="upper right", fontsize=9)
-fig
+fig;
 ```
 
 **Choosing the regularization strength.** The smoothing parameter `lam` is a
@@ -420,7 +420,7 @@ ax.set_xlabel("Regularization strength lambda")
 ax.set_ylabel("Relative L2 error vs. truth")
 ax.set_title("A broad basin of good regularization strengths")
 ax.legend(loc="center right", fontsize=9)
-fig
+fig;
 ```
 
 ## 3. Sparse biomarker selection on a real dataset
@@ -512,7 +512,7 @@ ax.axvline(0.5, color="0.5", linestyle="--", linewidth=1, label="coin flip")
 ax.set_xlabel("Fraction of bootstrap resamples that selected the feature")
 ax.set_title("Feature-selection stability under resampling")
 ax.legend(loc="lower right", fontsize=9)
-fig
+fig;
 ```
 
 ```{code-cell} ipython3

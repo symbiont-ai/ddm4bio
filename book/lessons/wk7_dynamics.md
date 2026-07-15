@@ -163,7 +163,7 @@ ax.set_xlabel("Re(λ)")
 ax.set_ylabel("Im(λ)")
 ax.set_title("DMD eigenvalues vs. known spectrum")
 ax.legend(loc="lower left", fontsize=8)
-fig
+fig;
 ```
 
 **QC note.** The DMD spectrum reproduces the prescribed eigenvalues to roughly
@@ -260,7 +260,7 @@ ax.set_ylabel("Term-recovery F1")
 ax.set_title("Where SINDy breaks: term recovery vs. noise")
 ax.annotate("exact recovery", xy=(0.1, 1.0), xytext=(0.5, 0.55),
             fontsize=9, arrowprops=dict(arrowstyle="->", color="0.5"))
-fig
+fig;
 ```
 
 **QC note.** SINDy recovers the Lorenz equations *exactly* up to a noise
@@ -347,7 +347,7 @@ axes[1].set_ylabel("Per-step L2 error")
 axes[1].set_title("Filtered error stays below observation error")
 axes[1].legend(loc="upper right", fontsize=8)
 fig.suptitle("Kalman filter: model + noisy data > either alone")
-fig
+fig;
 ```
 
 **QC note.** With a correct linear model and a well-specified noise level, the
@@ -467,7 +467,7 @@ ax.set_xlabel("Day of series")
 ax.set_ylabel("Daily new cases")
 ax.set_title(f"DMD on a real epidemic curve (source: {covid.source})")
 ax.legend(loc="upper left", fontsize=8)
-fig
+fig;
 ```
 
 **QC note.** DMD does not "know" epidemiology; it reports the best local linear
@@ -540,7 +540,7 @@ ax.set_xlabel("Time (s)")
 ax.set_ylabel("Amplitude (mV)")
 ax.set_title(f"Random-walk Kalman filter on a real ECG lead (source: {ecg.source})")
 ax.legend(loc="upper right", fontsize=8)
-fig
+fig;
 ```
 
 **QC note.** With no clean reference we cannot claim an error reduction the way

@@ -205,7 +205,7 @@ for ax, img, label in zip(axes.flat, images, y):
     ax.set_xticks([])
     ax.set_yticks([])
 fig.suptitle(f"Twelve crops from the {img_h}x{img_w} blood-cell library (our 'cells')")
-fig
+fig;
 ```
 
 ## 3. Building the eigen-image basis (the ground-truth-adjacent check)
@@ -253,7 +253,7 @@ from ddm4bio.viz.plots import scree_plot
 
 ax = scree_plot(evr[:20])       # first 20 modes; the tail is a slow decay to zero
 ax.set_title("Scree plot: explained variance of the top 20 eigen-images")
-ax.figure
+ax.figure;
 ```
 
 Now the eigen-images themselves. Each is a 64-pixel pattern reshaped back to
@@ -271,7 +271,7 @@ eigen_images = vt[:8]           # top 8 eigen-images, each length H*W
 
 fig = mode_grid(eigen_images, shape=(img_h, img_w), ncols=4)
 fig.suptitle("Top 8 eigen-images ('eigen-cells')")
-fig
+fig;
 ```
 
 ## 4. Reconstruction error vs. number of modes
@@ -317,7 +317,7 @@ for k, name in [(k90, "90%"), (k95, "95%"), (k99, "99%")]:
 ax.set_xlabel("Number of eigen-images (k)")
 ax.set_ylabel("Relative L2 reconstruction error")
 ax.set_title("Reconstruction error falls as the eigen-basis grows")
-fig
+fig;
 ```
 
 A visual confirmation: the same cell crop reconstructed from an increasing
@@ -338,7 +338,7 @@ for ax, k in zip(axes[1:], ks_to_show):
     ax.set_title(f"k={k}", fontsize=9)
     ax.set_xticks([]); ax.set_yticks([])
 fig.suptitle(f"Reconstructing one blood-cell crop (class {y[sample_idx]}) from k eigen-images")
-fig
+fig;
 ```
 
 ## 5. Recognition in the eigen-basis (with a leakage-free split)
@@ -418,7 +418,7 @@ for i in range(n_classes):
             ax.text(j, i, cm[i, j], ha="center", va="center",
                     fontsize=7, color="0.2" if cm[i, j] < cm.max() / 2 else "white")
 fig.colorbar(im, ax=ax, fraction=0.046, label="count")
-fig
+fig;
 ```
 
 **Why the split matters.** We fit the eigen-basis, the mean image, and the

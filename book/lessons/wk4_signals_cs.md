@@ -120,7 +120,7 @@ ax.plot(t, true_inst_freq, color="white", linestyle="--", linewidth=1.5,
         label="true instantaneous frequency")
 ax.set_ylim(0, 120)
 ax.legend(loc="upper left", fontsize=8, framealpha=0.6)
-ax.figure  # end the cell with the Figure so it renders in the notebook output
+ax.figure;  # end the cell with the Figure so it renders in the notebook output
 ```
 
 We can turn "the ridge follows the line" into a number. At each time frame the
@@ -223,7 +223,7 @@ axes[2].plot(t_d[window], denoised[window]); axes[2].set_ylabel("denoised")
 axes[2].set_xlabel("Time (s)")
 fig.suptitle(f"Wavelet denoising: {snr_in:.1f} dB in, {snr_out:.1f} dB out "
              f"({snr_gain:+.1f} dB gain)")
-fig
+fig;
 ```
 
 **Why the known SNR matters.** We did not eyeball the denoised trace and declare
@@ -278,7 +278,7 @@ f_ecg, t_frames, ecg_power = stft(ecg, fs=fs_ecg, nperseg=256)
 ax = time_freq_panel(t_frames, f_ecg, np.abs(ecg_power) ** 2)
 ax.set_ylim(0, 40)
 ax.set_title(f"MIT-BIH ECG spectrogram ({ds.source} data)")
-ax.figure  # end the cell with the Figure so it renders in the notebook output
+ax.figure;  # end the cell with the Figure so it renders in the notebook output
 ```
 
 Now wavelet denoising. A real recording gives us no separately-known clean
@@ -313,7 +313,7 @@ axes[1].plot(t_ecg[win], ecg[win], linewidth=0.8, linestyle="--", alpha=0.7)
 axes[1].set_ylabel("denoised")
 axes[1].set_xlabel("Time (s)")
 fig.suptitle("Wavelet denoising of a real MIT-BIH ECG window")
-fig
+fig;
 ```
 
 The recovered trace keeps the R-peaks crisp while suppressing the broadband
@@ -395,7 +395,7 @@ ax.set_xlabel("Sampling ratio (m / n)")
 ax.set_ylabel("Relative L2 reconstruction error")
 ax.set_title(f"Compressed-sensing phase transition (n={n}, k={k})")
 ax.legend(loc="upper right")
-fig
+fig;
 ```
 
 ```{code-cell} ipython3

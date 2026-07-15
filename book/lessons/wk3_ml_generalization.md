@@ -160,7 +160,7 @@ ax.set_xlabel("input $x$ (e.g. log-dose)")
 ax.set_ylabel("response")
 ax.set_title("Interpolation is easy; extrapolation is where flexible models break")
 ax.legend(loc="upper left", fontsize=8)
-fig
+fig;
 ```
 
 Visually both curves track the truth almost perfectly inside the shaded band
@@ -315,7 +315,7 @@ ax.set_xlabel("number of training samples")
 ax.set_ylabel("accuracy")
 ax.set_title("Learning curve: the train/validation gap closes as n grows")
 ax.legend(loc="lower right")
-fig
+fig;
 ```
 
 ```{code-cell} ipython3
@@ -373,7 +373,7 @@ ax.set_xlabel("cross-validated accuracy")
 ax.set_ylabel("count")
 ax.set_title("Permutation test: observed score vs. the chance distribution")
 ax.legend(loc="upper center")
-fig
+fig;
 ```
 
 **QC note.** The null distribution clusters near the majority-class rate -- the

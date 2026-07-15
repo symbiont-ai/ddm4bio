@@ -194,7 +194,7 @@ ax.set_xlabel("Gradient-descent epoch")
 ax.set_ylabel("Mean squared reconstruction error")
 ax.set_title("Linear autoencoder descends to the PCA optimum")
 ax.legend(loc="upper right")
-fig
+fig;
 ```
 
 ### 1c. Do the two reconstructions actually match?
@@ -239,7 +239,7 @@ ax.set_xlabel(f"PCA reconstruction (feature {feat})")
 ax.set_ylabel(f"Autoencoder reconstruction (feature {feat})")
 ax.set_title("Per-sample reconstructions coincide")
 ax.legend(loc="upper left")
-fig
+fig;
 ```
 
 ## 2. A biomedical latent space
@@ -327,7 +327,7 @@ ax.set_xlabel("Latent dimension 1")
 ax.set_ylabel("Latent dimension 2")
 ax.set_title("Two-dimensional linear latent of breast-cancer morphology")
 ax.legend(title="diagnosis", loc="upper right")
-fig
+fig;
 ```
 
 **What the picture shows.** The two diagnostic classes separate cleanly along the

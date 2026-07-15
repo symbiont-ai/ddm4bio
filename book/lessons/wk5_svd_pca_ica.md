@@ -142,7 +142,7 @@ from ddm4bio.viz.plots import scree_plot
 
 n_show = min(20, evr.size)
 ax = scree_plot(evr[:n_show])
-ax.figure  # end the cell with the Figure so it renders in the notebook output
+ax.figure;  # end the cell with the Figure so it renders in the notebook output
 ```
 
 Projecting the cells onto their first two principal components gives the
@@ -164,7 +164,7 @@ else:
 ax.set_xlabel("PC1")
 ax.set_ylabel("PC2")
 ax.set_title("PBMC cells in principal-component space")
-fig
+fig;
 ```
 
 Finally we quantify how much of each leading component lines up with the provided
@@ -250,7 +250,7 @@ for j in range(3):
 axes[0, 0].set_ylabel("True")
 axes[1, 0].set_ylabel("Observed")
 fig.suptitle("Blind source separation: ground truth (top) vs. mixtures (bottom)")
-fig
+fig;
 ```
 
 Now unmix. `ica_unmix` runs FastICA on the observations and returns one
@@ -300,7 +300,7 @@ for panel, (ti, ei) in enumerate(zip(true_idx, est_idx)):
     axes[panel].set_title(f"Source {panel + 1}")
     axes[panel].legend(loc="upper right", fontsize=8)
 fig.suptitle("Recovered sources overlaid on ground truth")
-fig
+fig;
 ```
 
 **Why this ordering matters.** We validated recovery on a fixture with a *known*

@@ -139,7 +139,7 @@ axes[1].set_ylabel("BIC")
 axes[1].set_title("BIC (lower is better)")
 
 fig.suptitle("Choosing the number of clusters from the data")
-fig
+fig;
 ```
 
 Now we cluster at the chosen `k` with both k-means and a Gaussian mixture, and we
@@ -175,7 +175,7 @@ for ax in axes:
     ax.set_xlabel("Feature 1")
 axes[0].set_ylabel("Feature 2")
 fig.suptitle("Recovered clusters overlaid on ground truth")
-fig
+fig;
 ```
 
 **QC note.** An ARI at or near 1.0 means the recovered partition is essentially
@@ -277,7 +277,7 @@ for ax in axes:
     ax.set_xlabel("Sample (reordered)")
     ax.set_ylabel("Sample (reordered)")
 fig.colorbar(im1, ax=axes, label="Co-clustering frequency", shrink=0.8)
-fig
+fig;
 ```
 
 **QC note.** Adding a fifth cluster does not add information; it manufactures an
@@ -390,7 +390,7 @@ axes[1].set_ylabel("Cell (reordered)")
 fig.colorbar(im, ax=axes[1], shrink=0.8, label="Co-clustering frequency")
 
 fig.suptitle(f"Clustering real single-cell data (source: {ds_sc.source})")
-fig
+fig;
 ```
 
 **QC note.** On real cells there is no ARI to hide behind, so the reportable
@@ -467,7 +467,7 @@ from ddm4bio.viz.plots import roc_with_ci as plot_roc
 
 ax = plot_roc(roc["fpr"], roc["tpr"])
 ax.set_title(f"Malignant-vs-benign ROC (AUC = {roc['auc']:.3f})")
-ax.figure  # end the cell with the Figure so it renders in the notebook output
+ax.figure;  # end the cell with the Figure so it renders in the notebook output
 ```
 
 **QC note.** The classifier separates the classes almost perfectly, and -- more
@@ -532,7 +532,7 @@ ax.set_xlabel("Feature (ranked by q-value)")
 ax.set_ylabel(r"$-\log_{10}(q)$")
 ax.set_title("Per-feature significance after BH FDR control")
 ax.legend(loc="upper right")
-fig
+fig;
 ```
 
 **QC note.** We report the FDR-corrected count, not the raw one. The four
