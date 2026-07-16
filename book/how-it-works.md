@@ -6,13 +6,13 @@ Here's what a typical week looks like and how everything fits together.
 
 ## Read, then build
 
-Each week begins with a handful of lesson pages. Read them first. They introduce the ideas in plain language, motivate why the method matters for real biological data, and set up the reasoning you'll need before you touch any code. Skimming works less well here than in most places, because the labs assume you've absorbed the conceptual thread.
+Each week begins with a lesson. Read it first — it introduces the ideas in plain language, motivates why the method matters for real biological data, and sets up the reasoning you'll need before you touch any code. Skimming works less well here than in most places, because running the code yourself assumes you've absorbed the conceptual thread.
 
-Once the lesson clicks, you open that week's lab notebook. Every lab runs in **Google Colab**, and opening it takes a single click from the lab page. There is nothing to install, no environment to configure, no dependency conflicts to debug at midnight. Colab hosts the notebook in your browser, and for the deep-learning weeks it gives you **free GPU access**, so you can train real models without owning a GPU or paying for cloud time. You write and run code in the same place you read the explanation of what that code is doing.
+Once the lesson clicks, you run it. The lesson *is* a notebook: the same page you just read opens in **Google Colab** with a single click, so you can run and modify every example yourself. There is nothing to install, no environment to configure, no dependency conflicts to debug at midnight. Colab hosts the notebook in your browser, and for the deep-learning week it gives you **free GPU access**, so you can train real models without owning a GPU or paying for cloud time. You write and run code in the very place you read the explanation of what it does.
 
 ## The `ddm4bio` library
 
-At the top of every lab, you'll import the course's own Python library, `ddm4bio`. Think of it as the vetted toolkit that lets you focus on the science instead of reinventing plumbing. It gives you:
+At the top of every lesson notebook, you'll import the course's own Python library, `ddm4bio`. Think of it as the vetted toolkit that lets you focus on the science instead of reinventing plumbing. It gives you:
 
 - **Data generators with known ground truth** — synthetic datasets where you already know the right answer, so you can check whether your method actually recovers it.
 - **Decomposition, QC, and validation tools** — the reliable building blocks for cleaning data, breaking signals into components, and testing whether a result holds up.
@@ -28,7 +28,7 @@ The autograders test the substance of your work, not just its surface. They're b
 
 ## The standards we hold — and why they matter
 
-Every lab and every problem set asks you to work to a small set of non-negotiable standards. These aren't bureaucratic hoops. Each one exists because skipping it is exactly how real scientific analyses go wrong. Getting them into your fingers is arguably the most valuable thing this course can give you.
+The lessons and the problem sets alike hold you to a small set of non-negotiable standards. These aren't bureaucratic hoops. Each one exists because skipping it is exactly how real scientific analyses go wrong. Getting them into your fingers is arguably the most valuable thing this course can give you.
 
 **Quality control before results.** You run QC on your data before you interpret anything. Raw data is almost never clean — there are dropouts, batch effects, and artifacts hiding in it. A beautiful result built on unchecked data is a beautiful mistake, and it's the kind that survives peer review and wastes years. QC first means you find the problem before it finds you.
 
@@ -42,6 +42,6 @@ Every lab and every problem set asks you to work to a small set of non-negotiabl
 
 ## In short
 
-Enroll anytime. Read the lessons, open the labs in Colab with one click, import `ddm4bio`, and build. Submit the seven problem sets through GitHub Classroom, get instant autograded feedback, and earn your certificate. Along the way, practice the habits that make analysis trustworthy — QC first, honest labels, calibrated confidence with named limitations, ground-truth validation, and full reproducibility — until they stop feeling like rules and start feeling like how you think.
+Enroll anytime. Read each lesson, open it in Colab with one click, import `ddm4bio`, and build. Submit the seven problem sets through GitHub Classroom, get instant autograded feedback, and earn your certificate. Along the way, practice the habits that make analysis trustworthy — QC first, honest labels, calibrated confidence with named limitations, ground-truth validation, and full reproducibility — until they stop feeling like rules and start feeling like how you think.
 
 Welcome aboard. Start whenever you like.
