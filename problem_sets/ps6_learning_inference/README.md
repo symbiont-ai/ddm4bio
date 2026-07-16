@@ -1,137 +1,85 @@
-# PS6 — Unsupervised Discovery and Supervised Inference
+# PS6 — Valid Inference After Clustering: The Double-Dipping Trap
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/symbiont-ai/ddm4bio/blob/main/problem_sets/ps6_learning_inference/ps6_colab.ipynb)
 
 **Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
 
-**Theme:** finding structure you did not know was there, then building a model
-that predicts something you care about — and, crucially, learning to distrust
-both until you have stress-tested them.
+**Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapters 15–16
+(clustering, classification), plus an introduction to multiple-testing / FDR and to
+selective inference (post-selection / data-thinning).
 
-**Reading (Kutz, *Data-Driven Modeling & Scientific Computation*).**
-Chapters 17–18 for unsupervised learning — clustering, mixture models, model
-selection, and the recurring warning that an algorithm will *always* return
-clusters whether or not any exist. Chapter 13 for supervised learning —
-regression and classification, the bias–variance trade-off, and why
-cross-validation is the honest way to estimate out-of-sample performance. Use
-the chapters as background; write all of your own code and prose.
+Week 6 clusters cells and then runs BH-FDR on per-feature t-tests **between the clusters
+it just discovered**. That is **circular** — the partition was chosen to separate the
+cells, so features look "significant" even in pure noise, and FDR does not fix it (BH
+corrects multiplicity, not selection). This problem set makes that failure *measurable*
+and builds a procedure that actually controls the error.
 
-This problem set has a single narrative arc. You are handed a cohort with no
-labels and asked two questions a biologist actually asks: *Are there subtypes in
-here?* and *Can I predict a clinical outcome?* You will answer both, and then
-spend at least as much effort deciding whether to believe your own answers.
+> This extends the lesson's own two tools — clustering and BH-FDR — turned against each
+> other. The clustering, the t-test, and BH are all **provided**; you build the *testing
+> procedure* and its calibration, which the lesson never teaches.
 
----
+Fill in the functions marked `# TODO` in `student/ps6.py`. The autograder grades
+**behavior** (the three protocols' Type-I error regimes and their retained power on a
+known-truth null and signal), so it can't be gamed by a constant or degenerate return.
 
-## Data (everything offline)
+## Data
 
-No downloads, no network, no credentials. Two offline sources only:
+- **`make_null(n, d, seed)`** — pure Gaussian noise: no clusters, no differential
+  features, so the true marker count is exactly **0** and every rejection is a known
+  false discovery. The load-bearing Type-I fixture.
+- **`make_signal(...)`** — two real groups with a **known informative-feature mask** (a
+  positive control for power).
+- **Real PBMC3k** via `load_pbmc()` (log-normalized, top-variance genes) — the Part-B
+  application, plus `make_gene_permuted_null` to show real marginals suppress the trap.
 
-- **Synthetic expression matrix** — `load_subtype_data()` wraps
-  `sklearn.datasets.make_blobs` into a samples × "genes" matrix with a *known*
-  number of latent subtypes. This stays synthetic on purpose: the clustering
-  ground truth (adjusted Rand index against the planted assignment) only makes
-  sense when the answer is known. Think of the blob centers as molecular
-  subtypes and the columns as genes.
-- **Breast-cancer diagnostics** — `load_diagnostic_data()` pulls the
-  Wisconsin Diagnostic Breast Cancer data through the course data layer,
-  `get_dataset("breast_wisconsin", download=False)` (569 samples, 30 features,
-  binary malignant/benign label). With `download=False` it resolves
-  deterministically to the offline scikit-learn-bundled copy, so it is fully
-  offline and needs no network or credentials.
+Seed everything through `ddm4bio.seed_everything()` (called in `main`).
 
-The data-loading and quality-control plumbing is already written in
-`student/ps6.py`. You implement only the method logic.
+## Part A — The protocols and their calibration
 
-Everything must be **deterministic and seeded** (use `GLOBAL_SEED`). Import
-numpy at the top; import scipy / scikit-learn inside your function bodies, the
-same convention the course library follows.
+Implement three post-clustering testing protocols and two Monte-Carlo harnesses:
 
----
+- `cluster_then_test_naive(X, k, alpha, seed)` — cluster all, test between clusters
+  (double-dipping).
+- `cluster_then_test_splitsample(X, k, alpha, seed)` — cluster split A, test held-out
+  split B (the intuitive fix that is **still inflated**).
+- `cluster_then_test_datathin(X, sigma, k, alpha, seed)` — Gaussian data-thinning
+  (`X1 = X + eps`, `X2 = X - eps`), cluster `X1`, test `X2` (the fix that **works**).
+- `null_false_discovery_profile(generate_null, protocol, R, alpha, seed0)` — Type-I
+  harness (`mean_fd`, `max_fd`, `prob_any_fd`).
+- `power_profile(generate_signal, protocol, R, alpha, seed0)` — retained-power harness.
 
-## (A) Method
+The headline result: on the null, naive rejects **~21/50** false markers, sample-split
+**~5**, data-thin **~0** (nominal α) — while all three keep essentially full power on real
+signal.
 
-Build the core machinery and demonstrate you understand its failure modes.
+## Part B — The real-data deliverable
 
-1. **Three ways to cluster.** Implement `cluster_all_methods` to partition the
-   feature matrix with k-means, a Gaussian mixture model, and agglomerative
-   (Ward) hierarchical clustering, using `ddm4bio.methods.clustering`. Return
-   all three labelings so they can be compared.
-2. **Choosing k, two ways.** Implement `select_number_of_subtypes` to pick the
-   number of clusters by both the mean silhouette coefficient (`select_k_silhouette`)
-   and the Gaussian-mixture BIC (`select_k_bic`). Report whether the two
-   criteria agree. When they disagree, that disagreement is *data*, not an
-   error — discuss it in part D.
-3. **Instability, honestly.** Implement `cluster_agreement` (adjusted Rand
-   index) and use it to quantify how much k-means, the GMM, and hierarchical
-   clustering agree with one another. Two algorithms that partition the same
-   data differently are telling you the structure is soft.
-4. **A classifier zoo with proper cross-validation.** Implement
-   `build_classifier` to return a `StandardScaler`-wrapped pipeline for each of
-   linear discriminant analysis (`"lda"`), a support-vector machine (`"svm"`),
-   a decision tree (`"tree"`), and a small neural network (`"nn"`). Implement
-   `evaluate_classifiers` to score each by stratified k-fold cross-validation
-   through `ddm4bio.methods.learning.cross_validate`. Scaling lives *inside* the
-   pipeline so it is refit within every fold — no test-fold information leaks
-   into training.
+- `inflation_summary(X, sigma, k, alpha, seed)` — run all three on one dataset and
+  quantify the naive over-call. On real PBMC3k the two valid protocols agree (~572
+  markers) while naive over-calls (~677, **+18%**).
 
-## (B) Application
+## Quality control & interpretation (required)
 
-1. **Discover candidate subtypes.** Run your clustering machinery on the
-   synthetic expression matrix. Select k, cluster three ways, and measure
-   agreement against the known subtypes and across methods.
-2. **Build a diagnostic classifier.** Implement `diagnostic_auc`: make a
-   stratified train/test split of the breast-cancer data (guarded by
-   `assert_no_leakage`), fit a classifier on the training split, and score the
-   held-out test set. Report the ROC-AUC together with a bootstrap **confidence
-   interval** via `ddm4bio.methods.learning.roc_with_ci`. A point estimate of
-   AUC without an interval is not an answer.
+Type-I inflation is graded on the synthetic null (true count 0), *not* the real data.
+The provided `main` closes with a `ddm4bio.interpret.interpretation_block`: state the
+confidence (the synthetic Type-I sweep is the calibrated evidence; real data is
+illustrative) and the honest limitations — data-thinning assumes Gaussian noise with an
+estimated variance, real single-cell counts double-dip only mildly, and FDR corrects
+multiplicity, not selection.
 
-## (C) Quality control *(required)*
+## Files
 
-Quality control is not an appendix here; it is the point of the assignment.
+- `student/ps6.py` — your working file; fill in every `# TODO`.
+- `rubric.md` — how this problem set is graded.
+- `ps6_colab.ipynb` — one-click Google Colab launcher (badge at the top).
+- The reference solution and the autograder are provided through the course and
+  run automatically by GitHub Classroom.
 
-1. **Is the clustering reproducible?** Implement `assess_cluster_stability`
-   using consensus (bootstrap-resampling) clustering from
-   `ddm4bio.methods.clustering.consensus_cluster`. Summarize the consensus
-   matrix by the Proportion of Ambiguously Clustered pairs (PAC) — the fraction
-   of sample pairs whose consensus value lands in the indecisive band between
-   0.1 and 0.9 — and turn that into a stability score. **Emit a warning when the
-   solution is not reproducible.** Over-clustering structureless data must trip
-   this guard.
-2. **Control the false-discovery rate.** Implement `per_feature_tests` (a
-   two-sample Welch t-test per feature between the two classes) and
-   `fdr_correct` (Benjamini–Hochberg via `ddm4bio.methods.learning.bh_fdr`).
-   Running 30+ univariate tests without correction manufactures false positives;
-   BH-FDR bounds the *expected* fraction of your "significant" features that are
-   noise.
+## Running
 
-## (D) Interpretation & confidence
+```bash
+python student/ps6.py          # runs until the first unimplemented function
+```
 
-Close with an honest interpretation block built through
-`ddm4bio.interpret.interpretation_block`. State plainly:
-
-- **Which subtypes are robust** — where do all three algorithms, the two
-  model-selection criteria, and the consensus stability score agree, and where
-  do they not?
-- **The AUC with its interval** — quote the confidence interval, not just the
-  point estimate, and say what a single train/test split can and cannot support.
-- **Where false-discovery risk remains** — how many features survive FDR, and
-  why surviving FDR bounds an expected error rate rather than certifying any
-  individual feature.
-
-Pick a confidence level (`"low"`, `"moderate"`, `"high"`) that your evidence
-actually earns, and name the real limitations — synthetic ground truth, a single
-split, and the difference between controlling a rate and proving a fact.
-
----
-
-## What you submit
-
-Implement every `# TODO` in `student/ps6.py`, keeping the public function
-signatures unchanged (the autograder imports them by name). Running
-`python student/ps6.py` should print the QC report, the selected k, the ARI
-values, the stability verdict, the cross-validation scores, the diagnostic AUC
-with its interval, the FDR result, and the interpretation block. Your code must
-be deterministic and pass `ruff check` under rules E, F, and I at a 100-column
-line length.
+To work in the browser instead, click the Colab badge at the top of this file.
+The autograder runs automatically when you push to GitHub Classroom.

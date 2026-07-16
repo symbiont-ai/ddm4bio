@@ -1,389 +1,381 @@
-"""PS6 -- Unsupervised discovery and supervised inference (student version).
+"""PS6: valid inference after clustering (the double-dipping trap).
 
-Fill in every function marked ``# TODO``. The data-loading and quality-control
-plumbing is already wired for you: run this file and it will load the fixtures,
-print a QC report, and then stop at the first method you still need to write.
+Week 6 clusters cells and then runs BH-FDR on per-feature t-tests *between the clusters
+it just discovered*. That is **circular**: the partition was chosen to separate the
+cells, so features look "significant" even in pure noise -- and FDR does not fix it (BH
+corrects multiplicity, not selection). This problem set makes that failure measurable,
+and builds a procedure that actually controls the error.
 
-Read the companion README.md for the assignment brief (parts A-D) and the
-required reading in Kutz chapters 17-18 and 13. You will lean on the course
-library:
+- Part A -- **validate the trap and the fix on synthetic data with KNOWN truth**: on a
+  pure-noise null (no clusters, no differential features, so the true marker count is
+  exactly 0) quantify the false discoveries of three workflows: (i) naive double-dipping,
+  (ii) sample-splitting -- the intuitive fix that is *still* inflated, and (iii) Gaussian
+  data-thinning, which restores the nominal error rate. A power check confirms the valid
+  methods keep real signal.
+- Part B -- **apply the calibrated protocols to real PBMC3k and interpret honestly**.
 
-    ddm4bio.methods.clustering -- kmeans_cluster, gmm_cluster,
-        hierarchical_cluster, select_k_silhouette, select_k_bic,
-        consensus_cluster
-    ddm4bio.methods.learning   -- cross_validate, roc_with_ci, bh_fdr
-    ddm4bio.interpret          -- interpretation_block
-
-Keep every public signature exactly as given: the autograder imports these
-names. numpy is imported at module level; import scipy/scikit-learn inside the
-function bodies, as the solution does.
+Fill in every function body marked ``# TODO``. The clustering (`kmeans_cluster`), the
+t-test (`per_feature_ttest`), BH-FDR (`bh_fdr`), the fixtures, `assign_to_centroids`,
+and `estimate_sigma` are provided -- this problem set is about the testing *procedure*,
+not the machinery. The autograder imports these functions by name, so keep the
+signatures exactly as given. Run with ``python ps6.py``; it stops at the first
+unimplemented function.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
 
 import numpy as np
 
-from ddm4bio.config import GLOBAL_SEED
+from ddm4bio.config import GLOBAL_SEED, seed_everything
 from ddm4bio.interpret import interpretation_block
+from ddm4bio.methods.clustering import kmeans_cluster  # noqa: F401  (use in the protocols)
+from ddm4bio.methods.learning import bh_fdr  # noqa: F401  (use in the protocols)
 
-# These course-library helpers are pre-wired for you to use in the TODOs below.
-# The lint-ignore markers just silence "imported but unused" until you use them.
-from ddm4bio.methods.clustering import (  # noqa: F401
-    consensus_cluster,
-    gmm_cluster,
-    hierarchical_cluster,
-    kmeans_cluster,
-    select_k_bic,
-    select_k_silhouette,
-)
-from ddm4bio.methods.learning import (  # noqa: F401
-    bh_fdr,
-    cross_validate,
-    roc_with_ci,
-)
-from ddm4bio.qc.report import QCReport, assert_no_leakage  # noqa: F401
-
-# ---------------------------------------------------------------------------
-# Data loading (offline fixtures) -- provided; do not edit.
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- #
+# Provided: fixtures, the t-test, and small helpers (do not edit)              #
+# --------------------------------------------------------------------------- #
 
 
-def load_subtype_data(
-    n_samples: int = 300,
-    n_features: int = 20,
-    centers: int = 3,
-    cluster_std: float = 1.0,
+def make_null(n: int = 300, d: int = 50, seed: int = GLOBAL_SEED) -> np.ndarray:
+    """(provided) Pure-noise data: ``X ~ N(0, I)`` with NO clusters and NO markers.
+
+    The true number of differential features is exactly 0, so every rejection a testing
+    procedure makes on this data is a known false discovery.
+
+    Note: the RNG is namespaced (``[seed, 101]``) so the generated data is drawn from a
+    different stream than a data-thinning noise draw at the same ``seed`` -- otherwise the
+    thinning noise could reconstruct the data exactly and silently break the fold split.
+    """
+    return np.random.default_rng([seed, 101]).standard_normal((n, d))
+
+
+def make_signal(
+    n: int = 300,
+    n_informative: int = 20,
+    n_noise: int = 30,
+    separation: float = 2.2,
     seed: int = GLOBAL_SEED,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Synthetic expression matrix with known latent subtypes (provided)."""
-    from sklearn.datasets import make_blobs
+    """(provided) Two real groups with a KNOWN informative-feature mask (positive control).
 
-    x, y = make_blobs(
-        n_samples=n_samples,
-        n_features=n_features,
-        centers=centers,
-        cluster_std=cluster_std,
-        random_state=seed,
-    )
-    return np.asarray(x, dtype=float), np.asarray(y, dtype=int)
+    The first ``n_informative`` features carry a two-group mean shift; the remaining
+    ``n_noise`` features are pure noise. Returns ``(X, informative_mask)`` where
+    ``informative_mask`` is a boolean array marking the truly differential features.
 
-
-def load_diagnostic_data() -> tuple[np.ndarray, np.ndarray, list[str]]:
-    """Breast-cancer diagnostic dataset via the course data layer (provided).
-
-    Resolves through ``get_dataset("breast_wisconsin", download=False)``, which
-    returns the offline scikit-learn-bundled WDBC data deterministically.
+    The RNG is namespaced (``[seed, 202]``) for the same reason as ``make_null``: the data
+    stream must not coincide with a data-thinning noise draw at the same ``seed``.
     """
-    from ddm4bio.datasets import get_dataset
+    rng = np.random.default_rng([seed, 202])
+    group = rng.integers(0, 2, size=n)  # true labels (unknown to the procedures)
+    shift = np.where(group[:, None] == 1, separation / 2, -separation / 2)
+    informative = shift + rng.standard_normal((n, n_informative))
+    noise = rng.standard_normal((n, n_noise))
+    x = np.hstack([informative, noise])
+    mask = np.zeros(n_informative + n_noise, dtype=bool)
+    mask[:n_informative] = True
+    return x, mask
 
-    payload = get_dataset("breast_wisconsin", download=False).payload
-    x = np.asarray(payload["X"], dtype=float)
-    y = np.asarray(payload["y"], dtype=int)
-    names = [str(n) for n in payload["feature_names"]]
-    return x, y, names
 
+def make_gene_permuted_null(x_real: np.ndarray, seed: int = GLOBAL_SEED) -> np.ndarray:
+    """(provided) A real-flavored null: permute each gene column of real data independently.
 
-def _unpack_singlecell(payload: Any) -> tuple[Any, np.ndarray | None]:
-    """Return ``(counts, labels)`` from an AnnData or a plain-dict payload.
-
-    The real 10x payload is an ``anndata.AnnData`` (raw counts in ``.X``, no
-    ground-truth cell types); the synthetic fallback is a dict with ``counts``
-    and planted ``labels``.
+    Destroys all cross-cell structure while preserving each gene's (sparse, heavy-tailed)
+    marginal -- used only to *illustrate* that real single-cell marginals suppress the
+    trap; Type-I error is graded on ``make_null``, not here.
     """
-    if hasattr(payload, "X"):  # AnnData: counts in .X, no ground-truth labels
-        return payload.X, None
-    return payload["counts"], payload.get("labels")
-
-
-def load_singlecell_data(
-    n_keep: int = 600,
-    n_top: int = 1000,
-    n_pcs: int = 30,
-    seed: int = GLOBAL_SEED,
-) -> tuple[np.ndarray, np.ndarray | None, str]:
-    """Real PBMC3k single-cell RNA-seq reduced to a clustering-ready embedding.
-
-    Loads the 10x Genomics PBMC3k matrix through ``get_dataset("pbmc3k")``
-    (``download=True`` by default, with a graceful synthetic fallback when the
-    source is unreachable), unpacks the AnnData-or-dict payload to raw counts
-    (plus planted labels when the fallback provides them), then normalizes each
-    cell to a common library size, takes ``log1p``, keeps the most variable
-    genes, and reduces to principal components.
-
-    Returns ``(embedding, labels, source)`` where ``embedding`` has shape
-    ``(n_cells, n_pcs)``, ``labels`` are the planted cell types when the payload
-    carries them (synthetic fallback) else ``None``, and ``source`` is the
-    provenance tag (``"real"`` or ``"fallback"``).
-    """
-    from sklearn.decomposition import PCA
-
-    from ddm4bio.datasets import get_dataset
-
-    ds = get_dataset("pbmc3k", seed=seed)
-    counts_raw, raw_labels = _unpack_singlecell(ds.payload)
-
     rng = np.random.default_rng(seed)
-    n_keep = min(n_keep, counts_raw.shape[0])
-    cells = np.sort(rng.choice(counts_raw.shape[0], size=n_keep, replace=False))
+    x = np.asarray(x_real, dtype=float)
+    out = np.empty_like(x)
+    for j in range(x.shape[1]):
+        out[:, j] = x[rng.permutation(x.shape[0]), j]
+    return out
 
-    sub = counts_raw[cells]
-    counts = sub.toarray() if hasattr(sub, "toarray") else np.asarray(sub)
-    counts = np.asarray(counts, dtype=float)
-    labels = None if raw_labels is None else np.asarray(raw_labels)[cells]
 
-    library = counts.sum(axis=1, keepdims=True)
+def load_pbmc(n_cells: int = 800, n_genes: int = 1000, seed: int = GLOBAL_SEED) -> np.ndarray:
+    """(provided) Real PBMC3k, library-normalized + log1p + top-variance genes, subsampled."""
+    from ddm4bio.datasets import get_dataset
+
+    ds = get_dataset("pbmc3k")
+    payload = ds.payload
+    counts = payload.X if hasattr(payload, "X") else payload["counts"]
+    counts = np.asarray(counts.toarray() if hasattr(counts, "toarray") else counts, dtype=float)
+    library = counts.sum(1, keepdims=True)
     library[library == 0] = 1.0
-    logn = np.log1p(counts / library * 1e4)
-
-    n_top = min(n_top, logn.shape[1])
-    top = np.argsort(logn.var(axis=0))[::-1][:n_top]
-    n_comp = min(n_pcs, n_keep - 1, n_top)
-    embed = PCA(n_components=n_comp, random_state=seed).fit_transform(logn[:, top])
-    return np.asarray(embed, dtype=float), labels, ds.source
-
-
-# ---------------------------------------------------------------------------
-# (A) Method + (B) Application
-# ---------------------------------------------------------------------------
+    log_counts = np.log1p(counts / library * float(np.median(counts.sum(1))))
+    top = np.argsort(log_counts.var(0))[::-1][: min(n_genes, log_counts.shape[1])]
+    x = log_counts[:, top]
+    if n_cells < x.shape[0]:
+        idx = np.sort(np.random.default_rng(seed).choice(x.shape[0], size=n_cells, replace=False))
+        x = x[idx]
+    return x
 
 
-def select_number_of_subtypes(
-    X: np.ndarray, k_range: object, seed: int = GLOBAL_SEED
-) -> dict[str, Any]:
-    """Pick the number of clusters via silhouette AND mixture BIC, then compare.
+def per_feature_ttest(X: np.ndarray, labels: np.ndarray) -> np.ndarray:
+    """(provided) Per-feature Welch two-sample t-test p-values between the two clusters.
 
-    Return a dict with keys ``best_k_silhouette``, ``best_k_bic`` (ints),
-    ``silhouette``, ``bic`` (the raw result dicts from the helpers), and
-    ``agree`` (bool: do the two criteria pick the same k?).
-
-    Hint: silhouette needs k >= 2; BIC accepts k >= 1. Use
-    ``select_k_silhouette`` and ``select_k_bic``.
+    Compares the two most populous label groups feature by feature. Returns a p-value per
+    feature (1.0 for a degenerate/constant feature or a group too small to test).
     """
-    # TODO: run both model-selection criteria and report whether they agree.
-    raise NotImplementedError
+    from scipy.stats import ttest_ind
+
+    X = np.asarray(X, dtype=float)
+    labels = np.asarray(labels)
+    values, counts = np.unique(labels, return_counts=True)
+    top_two = values[np.argsort(counts)[::-1][:2]]
+    g0 = X[labels == top_two[0]]
+    g1 = X[labels == top_two[1]] if top_two.size > 1 else X[:0]
+    if g0.shape[0] < 2 or g1.shape[0] < 2:
+        return np.ones(X.shape[1])
+    p = ttest_ind(g0, g1, axis=0, equal_var=False).pvalue
+    return np.nan_to_num(np.asarray(p, dtype=float), nan=1.0)
 
 
-def cluster_all_methods(X: np.ndarray, k: int, seed: int = GLOBAL_SEED) -> dict[str, np.ndarray]:
-    """Partition ``X`` into ``k`` clusters with k-means, GMM, and hierarchical.
+def assign_to_centroids(X: np.ndarray, centroids: np.ndarray) -> np.ndarray:
+    """(provided) Nearest-centroid label for each row of ``X``."""
+    X = np.asarray(X, dtype=float)
+    centroids = np.asarray(centroids, dtype=float)
+    dists = np.linalg.norm(X[:, None, :] - centroids[None, :, :], axis=2)
+    return np.argmin(dists, axis=1)
 
-    Return a dict with keys ``kmeans``, ``gmm``, ``hierarchical`` mapping to
-    integer label arrays of shape ``(n_samples,)``. Use the clustering helpers
-    (Ward linkage for the hierarchical one).
+
+def estimate_sigma(X: np.ndarray) -> np.ndarray:
+    """(provided) Per-feature noise standard deviation, for data-thinning on real data."""
+    return np.asarray(X, dtype=float).std(axis=0, ddof=1)
+
+
+def _centroids_from_labels(X: np.ndarray, labels: np.ndarray, k: int) -> np.ndarray:
+    """(provided) Group-mean centroids for labels 0..k-1 (empty groups -> the global mean)."""
+    X = np.asarray(X, dtype=float)
+    grand = X.mean(axis=0)
+    return np.array(
+        [X[labels == c].mean(axis=0) if np.any(labels == c) else grand for c in range(k)]
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Part A -- The three post-clustering testing protocols  (you implement)       #
+# --------------------------------------------------------------------------- #
+
+
+def cluster_then_test_naive(
+    X: np.ndarray, k: int = 2, alpha: float = 0.05, seed: int | None = None
+) -> dict:
+    """The double-dipping baseline: cluster ALL the data, then test between the clusters.
+
+    Cluster every row with ``kmeans_cluster``, run ``per_feature_ttest`` between the two
+    clusters, BH-correct at ``alpha``. Because the partition was fit to separate the very
+    rows being tested, this over-rejects on data with no real groups.
     """
-    # TODO: call the three clustering helpers and collect their labels.
-    raise NotImplementedError
+    # TODO: labels = kmeans_cluster(X, k, seed=seed); pvalues = per_feature_ttest(X, labels);
+    # fdr = bh_fdr(pvalues, alpha). Return a dict with keys "labels", "pvalues", "qvalues",
+    # "reject" (fdr["reject"]), and "n_reject" (int(reject.sum())).
+    raise NotImplementedError("Implement cluster_then_test_naive.")
 
 
-def cluster_agreement(labels_a: np.ndarray, labels_b: np.ndarray) -> float:
-    """Adjusted Rand index between two labelings (permutation-invariant).
+def cluster_then_test_splitsample(
+    X: np.ndarray, k: int = 2, alpha: float = 0.05, seed: int | None = None
+) -> dict:
+    """The intuitive but INSUFFICIENT fix: cluster on split A, test on held-out split B.
 
-    Return a float in ``[-0.5, 1.0]``. Use sklearn's ``adjusted_rand_score``.
+    Randomly split the rows into disjoint halves A and B, cluster A, assign B by nearest
+    centroid, and test between the B groups. Still inflated on a null, because B's labels
+    are assigned from B's own feature values -- the circularity survives the split.
     """
-    # TODO: import adjusted_rand_score and return the ARI as a float.
-    raise NotImplementedError
+    # TODO: rng = np.random.default_rng(seed); perm = rng.permutation(len(X)); split into
+    # disjoint idx_a, idx_b at the midpoint. Cluster X[idx_a] with kmeans_cluster;
+    # centroids = _centroids_from_labels(X[idx_a], labels_a, k); labels_b =
+    # assign_to_centroids(X[idx_b], centroids); pvalues = per_feature_ttest(X[idx_b],
+    # labels_b); BH-correct. Return {"labels_test", "pvalues", "qvalues", "reject",
+    # "n_reject"}.
+    raise NotImplementedError("Implement cluster_then_test_splitsample.")
 
 
-def build_classifier(name: str, seed: int = GLOBAL_SEED) -> Any:
-    """Return a StandardScaler-wrapped classifier by short name.
-
-    Support ``"lda"``, ``"svm"``, ``"tree"``, ``"nn"``. Wrap each estimator in a
-    ``Pipeline([("scale", StandardScaler()), ("clf", ...)])`` so the scaler is
-    refit inside every CV fold (no leakage). Raise ``ValueError`` for an unknown
-    name. Pass ``random_state=seed`` to the stochastic estimators.
-    """
-    # TODO: build and return the requested pipeline (raise ValueError otherwise).
-    raise NotImplementedError
-
-
-def evaluate_classifiers(
+def cluster_then_test_datathin(
     X: np.ndarray,
-    y: np.ndarray,
-    names: object = ("lda", "svm", "tree", "nn"),
-    cv: int = 5,
-    seed: int = GLOBAL_SEED,
-) -> dict[str, dict[str, Any]]:
-    """Cross-validate each named classifier (stratified k-fold accuracy).
+    sigma: np.ndarray | float,
+    k: int = 2,
+    alpha: float = 0.05,
+    seed: int | None = None,
+) -> dict:
+    """The protocol that actually controls the error: Gaussian data-thinning.
 
-    Return ``name -> {"mean", "std", "scores"}``. Use ``build_classifier`` and
-    the shared ``cross_validate`` helper with ``scoring="accuracy"``.
+    Draw ``eps ~ N(0, sigma^2)`` elementwise and form ``X1 = X + eps``, ``X2 = X - eps``;
+    under Gaussian noise these are independent. Cluster ``X1``, test on ``X2``. The labels
+    (from ``X1``) are independent of the values tested (``X2``), so a null grouping is
+    random with respect to the test data and the false-discovery rate stays at nominal.
     """
-    # TODO: loop over names, build each classifier, and cross-validate it.
-    raise NotImplementedError
+    # TODO: rng = np.random.default_rng(seed); eps = rng.standard_normal(X.shape) * sigma;
+    # X1 = X + eps, X2 = X - eps. labels = kmeans_cluster(X1, k, seed=seed);
+    # pvalues = per_feature_ttest(X2, labels); BH-correct. Return {"labels", "pvalues",
+    # "qvalues", "reject", "n_reject"}.
+    raise NotImplementedError("Implement cluster_then_test_datathin.")
 
 
-def _positive_scores(clf: Any, x: np.ndarray) -> np.ndarray:
-    """Positive-class score from a fitted classifier (provided helper).
+# --------------------------------------------------------------------------- #
+# Part A -- Monte-Carlo calibration harnesses  (you implement)                 #
+# --------------------------------------------------------------------------- #
 
-    Prefers ``predict_proba``; falls back to ``decision_function`` for margin
-    classifiers. Both are monotone in the positive-class evidence.
+
+def null_false_discovery_profile(
+    generate_null: Callable[[int], np.ndarray],
+    protocol: Callable[[np.ndarray, int], np.ndarray],
+    R: int = 200,
+    alpha: float = 0.05,
+    seed0: int = 0,
+) -> dict:
+    """Type-I harness: how many false discoveries does ``protocol`` make on the null?
+
+    Draw ``R`` independent known-null datasets from ``generate_null(seed)``, run
+    ``protocol(X, seed)`` (which returns a boolean reject mask) on each, and summarize.
+    Every rejection is by construction a false discovery. Returns ``mean_fd``, ``max_fd``,
+    and ``prob_any_fd`` (the family-wise error rate).
     """
-    if hasattr(clf, "predict_proba"):
-        return np.asarray(clf.predict_proba(x))[:, 1]
-    return np.asarray(clf.decision_function(x), dtype=float)
+    # TODO: for r in range(R): s = seed0 + r; reject = protocol(generate_null(s), s);
+    # record the number of rejections. Return {"mean_fd", "max_fd", "prob_any_fd"}
+    # (prob_any_fd = fraction of the R runs with at least one rejection).
+    raise NotImplementedError("Implement null_false_discovery_profile.")
 
 
-def diagnostic_auc(
+def power_profile(
+    generate_signal: Callable[[int], tuple[np.ndarray, np.ndarray]],
+    protocol: Callable[[np.ndarray, int], np.ndarray],
+    R: int = 30,
+    alpha: float = 0.05,
+    seed0: int = 0,
+) -> dict:
+    """Power harness: does ``protocol`` still recover the truly informative features?
+
+    Over ``R`` datasets from ``generate_signal(seed) -> (X, informative_mask)``, run the
+    protocol and count rejections that land on truly informative features. Returns
+    ``mean_recovered`` and ``frac_true_recovered`` (fraction of informative features found).
+    """
+    # TODO: for r in range(R): s = seed0 + r; X, mask = generate_signal(s);
+    # reject = protocol(X, s); count reject & mask (true positives) and the fraction of
+    # informative features recovered. Return {"mean_recovered", "frac_true_recovered"}.
+    raise NotImplementedError("Implement power_profile.")
+
+
+# --------------------------------------------------------------------------- #
+# Part B -- The real-data deliverable  (you implement)                         #
+# --------------------------------------------------------------------------- #
+
+
+def inflation_summary(
     X: np.ndarray,
-    y: np.ndarray,
-    test_size: float = 0.3,
-    clf_name: str = "lda",
-    n_boot: int = 1000,
-    seed: int = GLOBAL_SEED,
-) -> dict[str, Any]:
-    """Train a diagnostic classifier and report held-out ROC-AUC with a CI.
+    sigma: np.ndarray | float,
+    k: int = 2,
+    alpha: float = 0.05,
+    seed: int | None = None,
+) -> dict:
+    """Run all three protocols on one dataset and quantify the naive over-call.
 
-    Steps: make a stratified train/test split of the row indices; guard it with
-    ``assert_no_leakage``; fit ``build_classifier(clf_name)`` on the train rows;
-    score the test rows with ``_positive_scores``; then call ``roc_with_ci``.
-
-    Return a dict with keys ``auc`` (float), ``auc_ci`` (tuple), ``fpr``/``tpr``
-    (arrays), ``n_test`` (int), and ``clf_name`` (str).
+    Returns ``naive_n``, ``split_n``, ``thin_n`` (rejections each), ``inflation_extra``
+    (``naive_n`` minus the larger of the two valid counts), and ``inflation_pct``.
     """
-    # TODO: split (stratified, leakage-checked), fit, score, and call roc_with_ci.
-    raise NotImplementedError
+    # TODO: run the three protocols on X (n_reject each). valid = max(split_n, thin_n);
+    # inflation_extra = naive_n - valid; inflation_pct = 100 * inflation_extra / max(valid, 1).
+    # Return the dict with all five integer/float fields.
+    raise NotImplementedError("Implement inflation_summary.")
 
 
-# ---------------------------------------------------------------------------
-# (C) Quality control
-# ---------------------------------------------------------------------------
-
-
-def assess_cluster_stability(
-    X: np.ndarray,
-    k: int,
-    n_boot: int = 50,
-    subsample: float = 0.8,
-    seed: int = GLOBAL_SEED,
-    min_stability: float = 0.8,
-) -> dict[str, Any]:
-    """Consensus-resampling stability of a ``k``-cluster solution.
-
-    Run ``consensus_cluster``; summarize the upper-triangular off-diagonal
-    entries of the consensus matrix by the Proportion of Ambiguously Clustered
-    pairs (PAC) -- the fraction of pair values in the indecisive band
-    ``(0.1, 0.9)``. Define ``stability = 1 - PAC`` and
-    ``is_reproducible = stability >= min_stability``. When not reproducible,
-    append a human-readable string to a ``warnings`` list.
-
-    Return a dict with keys ``consensus_matrix``, ``labels``, ``pac`` (float),
-    ``stability`` (float), ``is_reproducible`` (bool), ``warnings`` (list).
-    """
-    # TODO: run consensus clustering, compute PAC/stability, and flag instability.
-    raise NotImplementedError
-
-
-def per_feature_tests(X: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """Two-sample Welch t-test p-value for every feature between two classes.
-
-    Return an array of shape ``(n_features,)`` of uncorrected p-values. Raise
-    ``ValueError`` if ``y`` does not have exactly two classes. Hint:
-    ``scipy.stats.ttest_ind(..., axis=0, equal_var=False)``.
-    """
-    # TODO: split rows by class and run a per-column two-sample t-test.
-    raise NotImplementedError
-
-
-def fdr_correct(pvalues: np.ndarray, alpha: float = 0.05) -> dict[str, np.ndarray]:
-    """Benjamini-Hochberg FDR control over a family of p-values.
-
-    Return a dict with keys ``qvalues`` and ``reject``. Use the ``bh_fdr``
-    helper.
-    """
-    # TODO: apply Benjamini-Hochberg correction via bh_fdr.
-    raise NotImplementedError
-
-
-def run_qc(X: np.ndarray, y: np.ndarray, feature_names: list[str] | None = None) -> QCReport:
-    """Tabular QC on the feature matrix and its labels (provided plumbing)."""
-    import pandas as pd
-
-    from ddm4bio.qc.tabular import qc_tabular
-
-    x = np.asarray(X, dtype=float)
-    if feature_names is None:
-        feature_names = [f"f{i}" for i in range(x.shape[1])]
-    df = pd.DataFrame(x, columns=feature_names)
-    df["target"] = np.asarray(y)
-    return qc_tabular(df)
-
-
-# ---------------------------------------------------------------------------
-# Driver
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- #
+# Provided: driver                                                             #
+# --------------------------------------------------------------------------- #
 
 
 def main() -> None:
-    """Run the full PS6 workflow end to end and print an interpretation block."""
-    seed = GLOBAL_SEED
+    """Show the double-dipping trap and the fix on known-truth data, then on real PBMC3k."""
+    seed_everything()
+    alpha = 0.05
 
-    # (B) Discover candidate cell subtypes in REAL single-cell PBMC3k data.
-    embed, sc_labels, sc_source = load_singlecell_data(seed=seed)
-    print(f"pbmc3k source={sc_source} embedding={embed.shape[0]} cells x {embed.shape[1]} PCs")
+    # Protocol callables sharing a (X, seed) -> reject-mask signature for the harnesses.
+    def p_naive(x, s):
+        return cluster_then_test_naive(x, k=2, alpha=alpha, seed=s)["reject"]
 
-    # QC plumbing runs before any modeling (provided). With no cell types the
-    # target is a placeholder just for the tabular shape/missingness check.
-    qc_target = sc_labels if sc_labels is not None else np.zeros(embed.shape[0], dtype=int)
-    print(run_qc(embed, qc_target).render())
-    print()
+    def p_split(x, s):
+        return cluster_then_test_splitsample(x, k=2, alpha=alpha, seed=s)["reject"]
 
-    # --- From here down you must implement the method functions above. ---
-    sel = select_number_of_subtypes(embed, range(1, 7), seed=seed)
-    k = sel["best_k_silhouette"]
+    def p_thin(x, s):
+        return cluster_then_test_datathin(x, 1.0, k=2, alpha=alpha, seed=s)["reject"]
+
+    print("== Part A: the trap and the fix on synthetic data (true marker count = 0) ==")
+    x0 = make_null(n=300, d=50, seed=0)
     print(
-        f"Selected k: silhouette={sel['best_k_silhouette']} "
-        f"BIC={sel['best_k_bic']} (agree={sel['agree']})"
+        f"    one null draw:  naive={cluster_then_test_naive(x0, seed=0)['n_reject']}  "
+        f"split={cluster_then_test_splitsample(x0, seed=0)['n_reject']}  "
+        f"thin={cluster_then_test_datathin(x0, 1.0, seed=0)['n_reject']}"
     )
 
-    labels = cluster_all_methods(embed, k=k, seed=seed)
-    ari_km_gmm = cluster_agreement(labels["kmeans"], labels["gmm"])
-    if sc_labels is not None:
-        ari_ref = cluster_agreement(sc_labels, labels["kmeans"])
-        print(f"ARI vs planted labels (k-means)={ari_ref:.3f} | k-means~GMM={ari_km_gmm:.3f}")
-    else:
-        print(f"No ground-truth labels (real cells) | k-means~GMM={ari_km_gmm:.3f}")
-
-    stab = assess_cluster_stability(embed, k=k, seed=seed)
-    print(f"Cluster stability={stab['stability']:.3f} reproducible={stab['is_reproducible']}")
-    for w in stab["warnings"]:
-        print(f"  WARNING: {w}")
-
-    x_dx, y_dx, names = load_diagnostic_data()
-    cv_results = evaluate_classifiers(x_dx, y_dx, seed=seed)
-    for name, r in cv_results.items():
-        print(f"CV accuracy [{name}]: {r['mean']:.3f} +/- {r['std']:.3f}")
-
-    dx = diagnostic_auc(x_dx, y_dx, clf_name="lda", seed=seed)
-    lo, hi = dx["auc_ci"]
-    print(f"Diagnostic ROC-AUC={dx['auc']:.3f} (95% CI {lo:.3f}-{hi:.3f})")
-
-    pvals = per_feature_tests(x_dx, y_dx)
-    fdr = fdr_correct(pvals, alpha=0.05)
-    n_sig = int(fdr["reject"].sum())
-    print(f"FDR-significant features: {n_sig}/{pvals.size} at alpha=0.05")
-
-    # (D) Interpretation & confidence.
-    print()
-    print(
-        interpretation_block(
-            claim=(
-                f"Real PBMC3k cells ({sc_source}) split into {k} candidate subtypes "
-                f"and the breast-cancer classifier is diagnostic (AUC {dx['auc']:.2f})."
-            ),
-            confidence="high",
-            limitations_list=[
-                "Real single-cell subtypes have no ground-truth labels; the evidence "
-                "is cross-method agreement and consensus stability, not an ARI.",
-                "A single train/test split gives one AUC point estimate.",
-                "FDR bounds the expected false-discovery rate, not any single feature.",
-            ],
-            evidence=(
-                f"k-means~GMM ARI={ari_km_gmm:.2f}, consensus stability "
-                f"{stab['stability']:.2f}, AUC CI {lo:.2f}-{hi:.2f}, BH-FDR at alpha=0.05"
-            ),
+    print("\n    Type-I over 200 null datasets (mean false discoveries / P(any) ):")
+    for name, proto in (("naive ", p_naive), ("split ", p_split), ("thin  ", p_thin)):
+        prof = null_false_discovery_profile(
+            lambda s: make_null(300, 50, s), proto, R=200, alpha=alpha
         )
+        print(
+            f"      {name}: mean_fd={prof['mean_fd']:6.2f}  max_fd={prof['max_fd']:3d}  "
+            f"P(any FD)={prof['prob_any_fd']:.3f}"
+        )
+    print(
+        "    -> naive massively inflated; sample-splitting is STILL inflated; only "
+        "data-thinning matches nominal alpha."
     )
+
+    print("\n    Power over 30 signal datasets (informative features recovered / 20):")
+    for name, proto in (("naive ", p_naive), ("split ", p_split), ("thin  ", p_thin)):
+        pw = power_profile(lambda s: make_signal(seed=s), proto, R=30, alpha=alpha)
+        print(
+            f"      {name}: mean_recovered={pw['mean_recovered']:5.1f}  "
+            f"frac={pw['frac_true_recovered']:.2f}"
+        )
+    print("    -> the valid methods keep their power; they only discard the fake signal.")
+
+    print("\n== Part B: apply the calibrated protocols to real PBMC3k ==")
+    x_real = load_pbmc(n_cells=800, n_genes=1000)
+    sigma_hat = estimate_sigma(x_real)
+    summ = inflation_summary(x_real, sigma_hat, k=2, seed=0)
+    print(
+        f"    naive={summ['naive_n']} markers @FDR{alpha}   "
+        f"split={summ['split_n']}   thin={summ['thin_n']}"
+    )
+    print(
+        f"    naive over-call vs the agreeing valid methods: +{summ['inflation_extra']} "
+        f"({summ['inflation_pct']:.0f}%)"
+    )
+    perm = make_gene_permuted_null(x_real, seed=0)
+    print(
+        f"    gene-permuted real null: naive={cluster_then_test_naive(perm, seed=0)['n_reject']} "
+        f"vs split={cluster_then_test_splitsample(perm, seed=0)['n_reject']} "
+        f"-> real marginals suppress the trap (Type-I is graded on the synthetic null)."
+    )
+
+    print("\n== Interpretation ==")
+    block = interpretation_block(
+        claim=(
+            "Testing marker genes between clusters discovered from the same cells is circular: "
+            "on a known null it produces many false discoveries that BH-FDR does not prevent, and "
+            "even sample-splitting stays inflated -- only data-thinning, which makes the discovery "
+            "and test sets independent by construction, restores the nominal error rate while "
+            "retaining power on real signal."
+        ),
+        confidence="high",
+        limitations_list=[
+            "Type-I control is demonstrated on Gaussian synthetic nulls; on real single-cell data "
+            "the sparse, heavy-tailed gene marginals suppress the trap, so the real counts are "
+            "illustrative (naive > valid), not a clean null.",
+            "Data-thinning assumes additive Gaussian noise with a known/estimated variance; on "
+            "genuinely count-distributed data the independence of the two folds is approximate.",
+            "The synthetic power check uses a planted informative-feature mask; real effect sizes "
+            "and dependence structure are richer.",
+        ],
+        evidence=(
+            "a known-null Type-I sweep separating naive, sample-split, and data-thin "
+            "false-discovery rates, a power sweep showing the valid methods keep real signal, "
+            "and a real-PBMC3k over-call quantified against the two agreeing valid protocols"
+        ),
+    )
+    print(block)
 
 
 if __name__ == "__main__":

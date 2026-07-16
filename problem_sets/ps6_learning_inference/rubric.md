@@ -1,74 +1,78 @@
-# PS6 Grading Rubric
+# PS6 Grading Rubric — Valid Inference After Clustering (The Double-Dipping Trap)
 
-Total: **100 points**. The autograder in `tests/test_ps6.py` establishes the
-objective floor (interfaces, ground truth, and performance thresholds on seeded
-offline data); the remaining judgment concerns method choice, honesty, and
-reproducibility. A submission that games a threshold without sound method does
-not earn the method points.
+Total: **100 points**. Grading combines the autograder (`tests/test_ps6.py`)
+with a short read of the submitted code and interpretation. All work must run
+offline and deterministically; a submission that only passes because it hard-codes
+expected numbers or disables a check earns no credit for the affected part.
 
----
+## Part A — The testing protocols and calibration harnesses — 60 points
 
-## Method correctness — 30 points
+- **`cluster_then_test_naive` (12).** Clusters all rows, runs the provided
+  `per_feature_ttest` between the two clusters, BH-corrects; returns the full result
+  dict. On a genuine two-group signal it recovers the informative features; on the null
+  it over-rejects (the trap made concrete).
+- **`cluster_then_test_splitsample` (16).** Disjoint A/B split (guarded against leakage),
+  cluster A, assign B by nearest centroid, test on **B only**. Full credit requires the
+  test to run on the held-out half — and the graded behavior is that it is *still*
+  inflated on the null (strictly between naive and data-thinning), because B's labels
+  are assigned from B's own values.
+- **`cluster_then_test_datathin` (17).** Gaussian data-thinning: `X1 = X + eps`,
+  `X2 = X - eps` with `eps ~ N(0, sigma^2)`, cluster `X1`, test `X2`. Full credit
+  requires clustering and testing the *two different folds* (not the same matrix), so the
+  labels are independent of the tested values and the false-discovery rate returns to
+  nominal — while power on real signal is retained.
+- **`null_false_discovery_profile` (8).** Monte-Carlo Type-I harness: draws `R` known-null
+  datasets, runs the protocol callable on each, returns `mean_fd`, `max_fd`, and
+  `prob_any_fd`. Must actually invoke the callable over the seed stream (checked with a
+  stub protocol).
+- **`power_profile` (7).** Counts rejections that land on the known informative-feature
+  mask; returns `mean_recovered` and `frac_true_recovered`. This is the power side of the
+  pincer that rules out a "reject nothing" shortcut.
 
-Does the core machinery implement the right algorithms correctly?
+## Part B — The real-data deliverable — 15 points
 
-- **Clustering (10).** `cluster_all_methods` returns k-means, Gaussian-mixture,
-  and Ward-hierarchical labelings of the correct shape, delegating to the
-  course clustering helpers. `cluster_agreement` computes a correct,
-  permutation-invariant adjusted Rand index.
-- **Model selection (10).** `select_number_of_subtypes` drives both the
-  silhouette and BIC criteria, respects their valid k-ranges (silhouette needs
-  k ≥ 2), and reports agreement. On separated blobs the silhouette recovers the
-  true k.
-- **Supervised zoo (10).** `build_classifier` returns a scaler-wrapped pipeline
-  for each of LDA, SVM, tree, and NN and raises `ValueError` on an unknown name.
-  `evaluate_classifiers` uses stratified cross-validation with scaling inside
-  the pipeline (no leakage).
+- **`inflation_summary` (15).** Runs all three protocols on one dataset and returns
+  `naive_n`, `split_n`, `thin_n`, `inflation_extra` (`naive_n` minus the larger valid
+  count), and `inflation_pct`. Correct ranking (`naive_n >= split_n, thin_n`) and
+  arithmetic. Applied to real PBMC3k in `main`.
 
-## Application execution — 25 points
+## Quality control & honesty — 10 points
 
-Does the pipeline actually run end-to-end on the offline data and produce the
-requested quantities?
+- **QC / honest use of ground truth (6).** Type-I inflation is measured on the synthetic
+  null (where the true marker count is exactly 0), not on the real data; the real PBMC3k
+  counts are reported as *illustrative* (naive > valid), with the gene-permuted null
+  showing that sparse real marginals suppress the trap.
+- **No leakage (4).** The sample-split uses `assert_no_leakage` (or an equivalent
+  disjoint-index guarantee); the data-thin folds are genuinely independent.
 
-- **Subtype discovery (12).** Clustering on the synthetic expression matrix
-  recovers the planted subtypes with high cross-method and vs-truth ARI
-  (> 0.9 on well-separated blobs).
-- **Diagnostic model (13).** `diagnostic_auc` performs a leakage-checked
-  stratified split, fits a classifier, and reports a held-out ROC-AUC (> 0.9 on
-  breast cancer) together with a bootstrap confidence interval. The score path
-  works for both probability classifiers and margin classifiers (SVM via the
-  decision function).
+## Interpretation & honesty — 10 points
 
-## Quality control — 25 points
-
-QC is weighted as heavily as application; this is a QC-centered assignment.
-
-- **Cluster stability (13).** `assess_cluster_stability` runs consensus
-  resampling, computes a defensible PAC-based stability score, and **warns when
-  the solution is not reproducible.** Full credit requires the guard to fire on
-  over-clustered, structureless data and stay silent on clean structure.
-- **Multiple testing (12).** `per_feature_tests` runs a correct per-feature
-  two-sample test (and rejects non-binary labels); `fdr_correct` applies
-  Benjamini–Hochberg. Full credit requires demonstrating both power (most true
-  signals recovered) and control (false discoveries among the nulls held near
-  the target rate).
-
-## Interpretation & honesty — 15 points
-
-- **Calibrated claim (7).** The interpretation block states a claim whose
-  confidence level matches the evidence — robustness across methods, the AUC
-  interval, and the FDR result. Overconfidence given a synthetic ground truth
-  and a single split loses points.
-- **Named limitations (8).** The submission explicitly names its real
-  limitations: synthetic vs. real data, one split vs. repeated splits, and the
-  distinction between controlling an expected error rate and certifying an
-  individual feature. Reporting an AUC point estimate without its interval, or
-  "significant features" without acknowledging FDR's meaning, is penalized.
+- A clear `interpretation_block` with a confidence level backed by the evidence actually
+  generated (the naive/split/thin Type-I separation, the retained-power sweep, the real
+  over-call), plus at least two honest limitations — that thinning assumes Gaussian noise
+  with an estimated variance, that real single-cell counts double-dip only mildly, and
+  that FDR corrects multiplicity, not selection. Overclaiming (e.g. "BH-FDR makes the
+  marker list trustworthy") is penalized.
 
 ## Reproducibility — 5 points
 
-- All results are deterministic under a fixed seed; re-running yields identical
-  numbers. Code passes `ruff check` under rules E, F, I at 100 columns, imports
-  numpy at the top and heavier libraries inside function bodies, and uses only
-  offline data (no network, no downloads). The autograder passes against the
-  reference solution.
+- Runs top-to-bottom with fixed seeds (k-means, the A/B split, and the thinning noise are
+  all seeded); imports follow the repository policy (only `numpy` at module top level,
+  heavier libraries inside function bodies); the file is `ruff`-clean under `E`, `F`, `I`
+  at line length 100; and no public function signature was changed.
+
+---
+
+### Autograder mapping
+
+| Test | Rubric area |
+| --- | --- |
+| `test_protocols_return_valid_structure_and_recover_real_signal` | Part A: the three protocols (structure + signal recovery) |
+| `test_type_I_error_separates_the_three_protocols_on_the_null` | Part A: naive inflated / split intermediate / thin controlled |
+| `test_all_three_protocols_retain_power_on_real_signal` | Part A: power (the pincer) |
+| `test_null_false_discovery_profile_arithmetic_with_a_stub` | Part A: `null_false_discovery_profile` |
+| `test_power_profile_arithmetic_with_a_stub` | Part A: `power_profile` |
+| `test_inflation_summary_ranks_and_quantifies_the_over_call` | Part B: `inflation_summary` |
+
+A passing autograder is necessary but not sufficient: the QC and interpretation
+credit is awarded for honest, well-argued analysis, not merely green tests.
