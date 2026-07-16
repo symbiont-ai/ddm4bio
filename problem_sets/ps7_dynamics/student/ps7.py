@@ -1,431 +1,376 @@
-"""PS7 student template -- data-driven dynamics (DMD, SINDy, Kalman filter).
+"""PS7: the predictability horizon (how far can you forecast before chaos wins?).
 
-Fill in the bodies of the public functions below. The imports, data-loading, and
-QC-call plumbing are already wired for you in ``main`` -- you only need to
-implement the method logic where the ``# TODO`` markers are.
+Week 7 fits data-driven models (DMD, SINDy, Kalman) and reports a one-shot forecast
+error at a fixed horizon. This problem set -- the course finale -- asks the question
+*underneath* every forecast: **how far ahead can any model see before chaos wins?** For a
+chaotic system the answer is a finite horizon set by the rate at which nearby trajectories
+diverge (the largest Lyapunov exponent); for a non-chaotic system the horizon is unbounded.
 
-Array conventions (see ddm4bio.methods.dynamics):
-* DMD uses snapshots of shape ``(n_features, n_time)`` (state in rows).
-* SINDy uses trajectories of shape ``(n_time, n_state)`` (time in rows).
-* The Kalman filter takes observations of shape ``(n_time, n_state)``.
+- Part A -- **measure the divergence rate on systems with KNOWN ground truth**: run
+  twin-trajectory ("butterfly") experiments, estimate the divergence rate lambda, and
+  derive the forecast horizon -- recovering Lorenz's known lambda and separating chaotic
+  (finite horizon) from non-chaotic (unbounded) systems.
+- Part B -- **apply the horizon idea to a real forecast**: measure the empirical horizon of
+  a data-driven model on real COVID incidence, and distinguish *intrinsic* predictability
+  (the system's Lyapunov limit) from *model-limited* predictability (this forecaster's skill).
 
-Everything must run OFFLINE and deterministically (seeds fixed). Do not add
-network calls, dataset downloads, or torch.
+Fill in every function body marked ``# TODO``. The systems, the integrators, the
+twin-trajectory plumbing, the fit-window heuristic, the real forecaster, and ``main`` are
+provided -- this problem set is about the six estimator functions, not the dynamics. The
+autograder imports these functions by name, so keep the signatures exactly as given. Run with
+``python ps7.py``; it stops at the first unimplemented function.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from ddm4bio.datasets import get_dataset
-from ddm4bio.datasets.synthetic import (
-    make_fitzhugh_nagumo,
-    make_linear_dynamics,
-    make_sir,
-)
+from ddm4bio.config import GLOBAL_SEED, seed_everything
 from ddm4bio.interpret import interpretation_block
-from ddm4bio.methods.dynamics import SINDyResult, dmd, kalman_filter, sindy_fit  # noqa: F401
-from ddm4bio.methods.validation import reconstruction_error, term_recovery  # noqa: F401
-from ddm4bio.qc.signals import qc_signals
 
-SEED = 0
-
-# Ground-truth active library terms for the reference systems.
-LINEAR_SPIRAL_TERMS = {"x0", "x1"}
-SIR_TERMS = {"x0 x1", "x1"}
+INF = float("inf")
 
 
-def _integrate_linear(a_mat: np.ndarray, x0: np.ndarray, t: np.ndarray) -> np.ndarray:
-    """Deterministic RK4 integration of the linear ODE ``dx/dt = A x``.
+# --------------------------------------------------------------------------- #
+# Provided: systems, integrators, twin-trajectory plumbing (do not edit)       #
+# --------------------------------------------------------------------------- #
 
-    This helper is provided so your ground-truth systems are reproducible.
 
-    Parameters
-    ----------
-    a_mat : np.ndarray, shape (d, d)
-        System matrix.
-    x0 : array-like, shape (d,)
-        Initial condition.
-    t : np.ndarray, shape (n_time,)
-        Uniform time grid.
+def integrate_system(
+    rhs, x0: np.ndarray, t_max: float, n_steps: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """(provided) Integrate ``dx/dt = rhs(t, x)`` from ``x0``; return ``(states, t)``.
 
-    Returns
-    -------
-    np.ndarray, shape (n_time, d)
-        State trajectory (time in rows, state in columns).
+    ``states`` has shape ``(n_steps, n_state)``. A thin deterministic ``solve_ivp`` wrapper
+    so you can propagate perturbed initial conditions for any system.
     """
-    dt = float(t[1] - t[0])
-    state = np.asarray(x0, dtype=float)
-    traj = np.empty((t.size, state.size), dtype=float)
-    traj[0] = state
-    for i in range(1, t.size):
-        k1 = a_mat @ state
-        k2 = a_mat @ (state + 0.5 * dt * k1)
-        k3 = a_mat @ (state + 0.5 * dt * k2)
-        k4 = a_mat @ (state + dt * k3)
-        state = state + (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
-        traj[i] = state
-    return traj
+    from scipy.integrate import solve_ivp
+
+    t = np.linspace(0.0, t_max, n_steps)
+    sol = solve_ivp(rhs, [0.0, t_max], np.asarray(x0, dtype=float), t_eval=t, rtol=1e-9, atol=1e-9)
+    return sol.y.T, t
 
 
-# ---------------------------------------------------------------------------
-# Part A -- Method
-# ---------------------------------------------------------------------------
-def run_dmd(snapshots: np.ndarray, r: int | None = None, dt: float = 1.0) -> dict:
-    """Dynamic Mode Decomposition of a snapshot matrix.
+def _fhn_rhs(t, s, a=0.7, b=0.8, tau=12.5, i_ext=0.5):
+    v, w = s
+    return [v - v**3 / 3.0 - w + i_ext, (v + a - b * w) / tau]
 
-    Fit exact DMD and derive the physically meaningful quantities from the
-    discrete-time eigenvalues ``lambda``: the continuous growth/decay rate
-    ``log|lambda| / dt`` and the oscillation frequency ``angle(lambda) / dt``.
 
-    Parameters
-    ----------
-    snapshots : np.ndarray, shape (n_features, n_time)
-        Snapshot matrix, state variables in ROWS and time samples in COLUMNS.
-    r : int, optional
-        SVD truncation rank; full rank when ``None``.
-    dt : float, default 1.0
-        Sample spacing, used to convert discrete eigenvalues to rates.
+def lorenz_twin_ensemble(
+    n_pairs: int = 120,
+    eps: float = 1e-7,
+    t_max: float = 8.0,
+    n_steps: int = 800,
+    seed: int = GLOBAL_SEED,
+) -> tuple[np.ndarray, np.ndarray]:
+    """(provided) Twin-trajectory separations for the chaotic Lorenz system.
 
-    Returns
-    -------
-    dict
-        Keys ``eigenvalues``, ``modes``, ``amplitudes``, ``growth_rates``,
-        ``frequencies``.
+    Samples ``n_pairs`` on-attractor start points, perturbs each by ``eps`` in a random
+    direction, integrates both members, and returns ``(sep_curves, t)`` where ``sep_curves``
+    has shape ``(n_pairs, n_steps)`` -- one separation curve per twin pair.
     """
-    # TODO: call dmd(snapshots, r=r); pull out eigenvalues/modes/amplitudes.
-    # TODO: compute growth_rates = log|lambda| / dt and
-    #       frequencies = angle(lambda) / dt, then return the dict.
-    raise NotImplementedError("Implement run_dmd")
+    from ddm4bio.datasets.synthetic import make_lorenz
+
+    rng = np.random.default_rng(seed)
+    attractor = make_lorenz(t_max=40.0, n_steps=4000, seed=seed + 1).states
+    starts = attractor[rng.integers(1000, 4000, size=n_pairs)]
+    seps = np.empty((n_pairs, n_steps), dtype=float)
+    for i, x0 in enumerate(starts):
+        d = rng.standard_normal(3)
+        d = eps * d / np.linalg.norm(d)
+        a = make_lorenz(x0=x0.copy(), t_max=t_max, n_steps=n_steps, seed=0).states
+        b = make_lorenz(x0=(x0 + d).copy(), t_max=t_max, n_steps=n_steps, seed=0).states
+        seps[i] = np.linalg.norm(b - a, axis=1)
+    return seps, np.linspace(0.0, t_max, n_steps)
 
 
-def sindy_terms(
-    trajectory: np.ndarray,
-    t: np.ndarray,
-    poly_degree: int = 2,
-    threshold: float = 0.1,
-) -> SINDyResult:
-    """Recover the governing equations of a trajectory with SINDy.
+def fhn_twin_ensemble(
+    n_pairs: int = 40,
+    eps: float = 1e-6,
+    t_max: float = 60.0,
+    n_steps: int = 1500,
+    seed: int = GLOBAL_SEED,
+) -> tuple[np.ndarray, np.ndarray]:
+    """(provided) Twin-trajectory separations for the non-chaotic FitzHugh-Nagumo limit cycle."""
+    from ddm4bio.datasets.synthetic import make_fitzhugh_nagumo
 
-    Parameters
-    ----------
-    trajectory : np.ndarray, shape (n_time, n_state)
-        Measured state trajectory.
-    t : np.ndarray
-        Time stamps (1-D) or scalar sample spacing.
-    poly_degree : int, default 2
-        Maximum monomial degree of the candidate library.
-    threshold : float, default 0.1
-        STLSQ sparsity threshold.
+    fh = make_fitzhugh_nagumo(t_max=400.0, n_steps=4000)
+    on_cycle = np.array([fh.v[-1], fh.w[-1]])
+    rng = np.random.default_rng(seed)
+    seps = np.empty((n_pairs, n_steps), dtype=float)
+    for i in range(n_pairs):
+        x0 = on_cycle + 0.5 * rng.standard_normal(2)
+        d = rng.standard_normal(2)
+        d = eps * d / np.linalg.norm(d)
+        a, _ = integrate_system(_fhn_rhs, x0, t_max, n_steps)
+        b, t = integrate_system(_fhn_rhs, x0 + d, t_max, n_steps)
+        seps[i] = np.linalg.norm(b - a, axis=1)
+    return seps, np.linspace(0.0, t_max, n_steps)
 
-    Returns
-    -------
-    SINDyResult
-        Fitted SINDy result (coefficients, feature names, active-term sets).
+
+def linear_twin_ensemble(
+    n_pairs: int = 30, eps: float = 1e-6, n_steps: int = 120, seed: int = GLOBAL_SEED
+) -> tuple[np.ndarray, np.ndarray]:
+    """(provided) Twin-trajectory separations for a stable linear system (per-step time axis)."""
+    from ddm4bio.datasets.synthetic import make_linear_dynamics
+
+    a_mat = make_linear_dynamics(eigs=np.array([0.95, 0.90]), n_steps=1, seed=seed).A
+    rng = np.random.default_rng(seed)
+    seps = np.empty((n_pairs, n_steps), dtype=float)
+    for i in range(n_pairs):
+        x0 = rng.standard_normal(2)
+        xa, xb = x0.copy(), x0 + eps * rng.standard_normal(2)
+        for k in range(n_steps):
+            seps[i, k] = np.linalg.norm(xb - xa)
+            xa, xb = a_mat @ xa, a_mat @ xb
+    return seps, np.arange(n_steps, dtype=float)
+
+
+def select_exponential_window(
+    t: np.ndarray, mean_log_sep: np.ndarray, floor_frac: float = 0.12, sat_frac: float = 0.6
+) -> tuple[int, int]:
+    """(provided) A fit window above the initial transient and below saturation.
+
+    Returns ``(start, end)`` indices bracketing the exponential-growth region: it ends where
+    the mean-log separation first reaches ``sat_frac`` of its total rise, and starts a
+    fraction ``floor_frac`` of the way into that span.
     """
-    # TODO: call sindy_fit with the given poly_degree and threshold and return
-    #       its result (keep the (n_time, n_state) trajectory convention).
-    raise NotImplementedError("Implement sindy_terms")
+    mls = np.asarray(mean_log_sep, dtype=float)
+    lo, hi = mls.min(), mls.max()
+    if hi <= lo:
+        return 0, len(mls)
+    level = lo + sat_frac * (hi - lo)
+    end = int(np.searchsorted(mls, level))
+    end = max(end, 3)
+    start = int(floor_frac * end)
+    return start, end
 
 
-def kalman_denoise(
-    observations: np.ndarray,
-    process_var: float = 1.0,
-    meas_var: float = 1.0,
-) -> np.ndarray:
-    """Denoise a directly-observed trajectory with a random-walk Kalman filter.
+def hankel_dmd_forecast(
+    series: np.ndarray, embed: int = 14, r: int = 6, n_train: int = 400, n_forecast: int = 30
+) -> tuple[np.ndarray, np.ndarray]:
+    """(provided) A time-delay (Hankel) DMD forecast of a 1-D series.
 
-    Use the matched linear model where each state follows a random walk
-    (``F = I``) observed directly (``H = I``), with ``Q = process_var * I`` and
-    ``R = meas_var * I``.
-
-    Parameters
-    ----------
-    observations : np.ndarray, shape (n_time, n_state)
-        Noisy observations (time in rows).
-    process_var : float, default 1.0
-        Diagonal process-noise variance.
-    meas_var : float, default 1.0
-        Diagonal measurement-noise variance.
-
-    Returns
-    -------
-    np.ndarray, shape (n_time, n_state)
-        Filtered (posterior) state estimates.
+    Builds a delay-embedded matrix from ``series[:n_train]``, fits DMD, evolves it forward
+    from the last training snapshot, and returns ``(y_true, y_pred)`` for the ``n_forecast``
+    steps after ``n_train``.
     """
-    obs = np.asarray(observations, dtype=float)
-    if obs.ndim == 1:
-        obs = obs[:, np.newaxis]
-    # TODO: build F = H = identity(n_state), Q = process_var * I, R = meas_var * I,
-    #       then call kalman_filter(obs, F, H, Q, R) and return the result.
-    raise NotImplementedError("Implement kalman_denoise")
+    from ddm4bio.methods.dynamics import dmd
+
+    series = np.asarray(series, dtype=float)
+    train = series[:n_train]
+    ncol = len(train) - embed + 1
+    hankel = np.array([train[i : i + ncol] for i in range(embed)])  # (embed, ncol)
+    res = dmd(hankel, r=r)
+    eig, modes = res.eigenvalues, res.modes
+    x_last = hankel[:, -1]
+    b_last = np.linalg.lstsq(modes, x_last, rcond=None)[0]
+    steps = np.arange(1, n_forecast + 1)
+    vander = eig[:, None] ** steps[None, :]
+    recon = (modes @ (vander * b_last[:, None])).real  # (embed, n_forecast)
+    y_pred = recon[-1]
+    y_true = series[n_train : n_train + n_forecast]
+    m = min(len(y_true), len(y_pred))
+    return y_true[:m], y_pred[:m]
 
 
-# ---------------------------------------------------------------------------
-# Part C -- Quality control
-# ---------------------------------------------------------------------------
-def sindy_noise_sensitivity(
-    noise_levels: list[float],
-    seed: int = SEED,
-    threshold: float = 0.1,
-) -> list[dict]:
-    """Ground-truth QC sweep: term recovery vs. observation noise.
+def load_covid_incidence() -> tuple[np.ndarray, str]:
+    """(provided) Real JHU COVID-19 daily incidence, log1p-compressed. Returns ``(y, source)``."""
+    from ddm4bio.datasets import get_dataset
 
-    Generate a clean 2-D linear spiral (``dx0 = -0.2 x0 + x1``,
-    ``dx1 = -x0 - 0.2 x1``) whose only active terms are ``LINEAR_SPIRAL_TERMS``,
-    add Gaussian noise at each level, refit SINDy, and score term recovery.
+    ds = get_dataset("jhu_covid")
+    cases = np.asarray(ds.payload["cases"], dtype=float)
+    daily = np.clip(np.diff(cases), 0.0, None)  # cumulative -> daily new (clip correction dips)
+    return np.log1p(daily), ds.source
 
-    Parameters
-    ----------
-    noise_levels : list of float
-        Standard deviations of additive Gaussian noise to sweep.
-    seed : int, default ``SEED``
-        Base RNG seed; use a distinct offset per level for reproducibility.
-    threshold : float, default 0.1
-        STLSQ sparsity threshold passed to SINDy.
 
-    Returns
-    -------
-    list of dict
-        One record per noise level with keys ``noise``, ``precision``,
-        ``recall``, ``f1``.
+def load_ecg_series() -> tuple[np.ndarray, float, str]:
+    """(provided) Real MIT-BIH ECG (first channel). Returns ``(signal, fs, source)``."""
+    from ddm4bio.datasets import get_dataset
+
+    ds = get_dataset("mitbih")
+    sig = np.asarray(ds.payload["signal"], dtype=float)[:, 0]
+    return sig, float(ds.payload["fs"]), ds.source
+
+
+def run_qc(series: np.ndarray, label: str) -> None:
+    """(provided) Print a QC line before any results."""
+    s = np.asarray(series, dtype=float)
+    print(
+        f"QC [{label}]: length {s.size}, finite {np.isfinite(s).mean():.0%}, "
+        f"range [{np.nanmin(s):.3g}, {np.nanmax(s):.3g}]."
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Part A -- The divergence rate and the horizon  (you implement)               #
+# --------------------------------------------------------------------------- #
+
+
+def separation_curve(traj_a: np.ndarray, traj_b: np.ndarray) -> np.ndarray:
+    """Per-timestep Euclidean separation ``||traj_b(t) - traj_a(t)||`` of a twin pair.
+
+    Each trajectory has shape ``(n_time, n_state)``; returns a ``(n_time,)`` curve.
     """
-    a_mat = np.array([[-0.2, 1.0], [-1.0, -0.2]])
-    t = np.linspace(0.0, 20.0, 4000)
-    clean = _integrate_linear(a_mat, np.array([2.0, 0.0]), t)
-
-    records: list[dict] = []
-    for i, sd in enumerate(noise_levels):
-        rng = np.random.default_rng(seed + i + 1)
-        noisy = clean + float(sd) * rng.standard_normal(clean.shape)  # noqa: F841
-        # TODO: fit SINDy on `noisy` via sindy_terms, score it with
-        #       term_recovery(LINEAR_SPIRAL_TERMS, result), and append a record
-        #       {"noise", "precision", "recall", "f1"}.
-        raise NotImplementedError("Implement sindy_noise_sensitivity")
-    return records
+    # TODO: return the Euclidean norm of (traj_b - traj_a) along the state axis (axis=1).
+    raise NotImplementedError("Implement separation_curve.")
 
 
-def dmd_forecast(snapshots: np.ndarray, n_train: int, r: int | None = None) -> dict:
-    """Out-of-sample DMD forecast with a held-out future horizon.
+def ensemble_log_divergence(sep_curves: np.ndarray, floor: float = 1e-12) -> np.ndarray:
+    """Mean over pairs of ``ln(separation)`` at each time (the Lyapunov ensemble estimator).
 
-    Fit DMD on the first ``n_train`` snapshots only, then propagate the modal
-    amplitudes forward with the DMD eigenvalues (a Vandermonde time-evolution:
-    column ``k`` is ``lambda**k``) to predict the held-out future columns.
-
-    Parameters
-    ----------
-    snapshots : np.ndarray, shape (n_features, n_time)
-        Full snapshot matrix (state in rows, time in columns).
-    n_train : int
-        Number of leading columns used for fitting; the remainder are held out.
-    r : int, optional
-        SVD truncation rank for the DMD fit.
-
-    Returns
-    -------
-    dict
-        Keys ``forecast``, ``reconstruction``, ``train_error``, ``test_error``
-        (the last two are relative-L2 errors from ``reconstruction_error``).
+    Given ``(n_pairs, n_time)`` separation curves, average the *logs* (not the raw
+    separations), flooring at ``floor`` so a zero separation is finite. Returns ``(n_time,)``.
     """
-    x_arr = np.asarray(snapshots, dtype=float)
-    n_time = x_arr.shape[1]
-    if not 1 < n_train < n_time:
-        raise ValueError("n_train must satisfy 1 < n_train < n_time")
-
-    train = x_arr[:, :n_train]  # noqa: F841
-    # TODO: fit DMD on `train`; build the (r, n_time) Vandermonde evolution
-    #       lambda**k scaled by the amplitudes; reconstruct = (modes @ evolution).real.
-    # TODO: split off forecast = reconstruction[:, n_train:], compute train_error
-    #       and test_error with reconstruction_error(..., "rel_l2"), return the dict.
-    raise NotImplementedError("Implement dmd_forecast")
+    # TODO: take np.log(np.maximum(sep_curves, floor)) and average over the pair axis (axis=0).
+    # Averaging the LOGS (not logging the average) is what makes this a Lyapunov estimator.
+    raise NotImplementedError("Implement ensemble_log_divergence.")
 
 
-# ---------------------------------------------------------------------------
-# Part B -- Application
-# ---------------------------------------------------------------------------
-def fit_epidemic_dynamics(sir, threshold: float = 0.05) -> dict:
-    """Recover SIR governing terms from synthetic case-count data with SINDy.
+def divergence_rate(
+    t: np.ndarray, mean_log_sep: np.ndarray, window: tuple[int, int] | None = None
+) -> float:
+    """Largest Lyapunov exponent: the least-squares slope of ``mean_log_sep`` vs ``t``.
 
-    Use the (S, I) sub-state: with ``dS = -beta S I`` and
-    ``dI = beta S I - gamma I`` the active terms are ``SIR_TERMS`` = the bilinear
-    ``x0 x1`` and the linear ``x1``. R is dropped to avoid the ``S+I+R``
-    collinearity.
-
-    Parameters
-    ----------
-    sir : SIRTrajectory
-        Ground-truth SIR trajectory from ``make_sir``.
-    threshold : float, default 0.05
-        STLSQ sparsity threshold.
-
-    Returns
-    -------
-    dict
-        Keys ``result`` (the ``SINDyResult``), ``scores`` (term_recovery dict),
-        ``true_terms`` (the ground-truth active-term set).
+    Fit over ``window = (start, end)`` indices (the exponential-growth region) if given, else
+    the full range. Positive for chaos, ~0 or negative for a non-chaotic system.
     """
-    state = np.column_stack([sir.susceptible, sir.infected])  # noqa: F841
-    # TODO: fit SINDy on `state` (time grid sir.t) via sindy_terms; score with
-    #       term_recovery(SIR_TERMS, result); return the result/scores/true_terms.
-    raise NotImplementedError("Implement fit_epidemic_dynamics")
+    # TODO: if window is given, slice t and mean_log_sep to [start:end]; return the slope of a
+    # degree-1 np.polyfit(t, mean_log_sep, 1)[0] as a float.
+    raise NotImplementedError("Implement divergence_rate.")
 
 
-def filter_physiological_signal(
-    clean: np.ndarray,
-    noisy: np.ndarray,
-    process_var: float = 0.05,
-    meas_var: float = 0.25,
-) -> dict:
-    """Kalman-filter a noisy physiological signal and compare to the raw signal.
+def finite_time_rate(t: np.ndarray, mean_log_sep: np.ndarray, half: int = 5) -> np.ndarray:
+    """Local (finite-difference) divergence rate at each time; its PLATEAU is ``lambda``.
 
-    Apply the filter to ``noisy`` and compare the filtered estimate against the
-    known ``clean`` signal, reporting L2 error for both raw and filtered.
-
-    Parameters
-    ----------
-    clean : np.ndarray, shape (n_time, n_state)
-        Ground-truth clean signal.
-    noisy : np.ndarray, shape (n_time, n_state)
-        Noisy observations of the same signal.
-    process_var : float, default 0.05
-        Random-walk process variance for the filter.
-    meas_var : float, default 0.25
-        Measurement-noise variance for the filter.
-
-    Returns
-    -------
-    dict
-        Keys ``filtered``, ``error_raw``, ``error_filtered``, ``improved``.
+    A centered slope with half-width ``half`` (clipped at the ends): its early rise exposes
+    the alignment transient and its late fall exposes attractor saturation. Returns ``(n_time,)``.
     """
-    clean_arr = np.asarray(clean, dtype=float)  # noqa: F841
-    # TODO: filter `noisy` with kalman_denoise(process_var, meas_var); compute
-    #       error_raw and error_filtered as L2 norms vs clean_arr; set
-    #       improved = error_filtered < error_raw; return the dict.
-    raise NotImplementedError("Implement filter_physiological_signal")
+    # TODO: for each index i, use lo=max(0,i-half), hi=min(n-1,i+half) and compute the local
+    # slope (mean_log_sep[hi] - mean_log_sep[lo]) / (t[hi] - t[lo]). Return the (n_time,) array.
+    raise NotImplementedError("Implement finite_time_rate.")
 
 
-# ---------------------------------------------------------------------------
-# Driver
-# ---------------------------------------------------------------------------
+def forecast_horizon(lam: float, eps: float, tol: float) -> float:
+    """Predictability horizon ``T = (1/lam) * ln(tol / eps)``.
+
+    The lead time at which an initial uncertainty ``eps`` grows to tolerance ``tol``. Returns
+    ``inf`` (use ``INF``/``float('inf')``) when ``lam <= 0`` (error never diverges).
+    """
+    # TODO: if lam <= 0 return INF; else return (1/lam) * ln(tol/eps) as a float.
+    raise NotImplementedError("Implement forecast_horizon.")
+
+
+def empirical_forecast_horizon(
+    y_true: np.ndarray, y_pred: np.ndarray, t: np.ndarray, tol: float
+) -> float:
+    """Model-limited horizon: the first time the forecast error exceeds ``tol``.
+
+    Returns ``t[k]`` at the first ``k`` where ``|y_pred - y_true| > tol``; if the error never
+    crosses, returns the censored endpoint ``t[-1]``.
+    """
+    # TODO: err = |y_pred - y_true|; find the first index where err > tol and return t there;
+    # if there is no crossing, return t[-1] (censored).
+    raise NotImplementedError("Implement empirical_forecast_horizon.")
+
+
+# --------------------------------------------------------------------------- #
+# Provided: driver                                                             #
+# --------------------------------------------------------------------------- #
+
+
+def _lambda_of(ensemble_fn) -> tuple[float, np.ndarray, np.ndarray]:
+    seps, t = ensemble_fn()
+    mls = ensemble_log_divergence(seps)
+    lam = divergence_rate(t, mls, select_exponential_window(t, mls))
+    return lam, t, mls
+
+
 def main() -> None:
-    """Run the full PS7 pipeline and print QC + interpretation output."""
-    rng = np.random.default_rng(SEED)
+    """Measure the predictability horizon on known systems, then on a real forecast."""
+    seed_everything()
 
-    # --- Part A: DMD on a synthetic linear spatio-temporal system ------------
-    eigs = np.array([0.97 + 0.08j, 0.97 - 0.08j, 0.85 + 0.0j])
-    linear = make_linear_dynamics(eigs, n_steps=200, seed=3)
-    snapshots = linear.trajectory.T
-    dmd_out = run_dmd(snapshots)
-    print("=== Part A: DMD ===")
-    print("DMD |eig|       :", np.round(np.sort(np.abs(dmd_out["eigenvalues"])), 4))
-
-    # --- Part A: SINDy recovers the governing terms --------------------------
-    a_mat = np.array([[-0.2, 1.0], [-1.0, -0.2]])
-    t = np.linspace(0.0, 20.0, 4000)
-    clean_spiral = _integrate_linear(a_mat, np.array([2.0, 0.0]), t)
-    spiral_noisy = clean_spiral + 1e-3 * rng.standard_normal(clean_spiral.shape)
-    sindy_result = sindy_terms(spiral_noisy, t, poly_degree=2, threshold=0.1)
-    spiral_scores = term_recovery(LINEAR_SPIRAL_TERMS, sindy_result)
-    print("\n=== Part A: SINDy ===")
-    print("recovered terms :", sorted(sindy_result.active_terms))
+    print("== Part A: unit checks on closed-form fixtures ==")
+    grid = np.linspace(0.0, 5.0, 50)
     print(
-        "precision/recall:",
-        round(spiral_scores["precision"], 3),
-        "/",
-        round(spiral_scores["recall"], 3),
+        f"    separation of constant offset [3,4,0] = "
+        f"{separation_curve(np.zeros((3, 3)), np.zeros((3, 3)) + [3, 4, 0])[0]:.1f} (=5)"
+    )
+    print(
+        f"    divergence_rate of exp(0.9 t)         = "
+        f"{divergence_rate(grid, np.log(1e-7) + 0.9 * grid):.3f} (=0.9)"
+    )
+    print(
+        f"    forecast_horizon(0.9, 1e-7, 1)        = {forecast_horizon(0.9, 1e-7, 1.0):.1f}  |  "
+        f"non-chaotic (lam=-0.03) = {forecast_horizon(-0.03, 1e-7, 1.0)}"
     )
 
-    # --- Part C: QC BEFORE real data (noise sensitivity) ---------------------
-    noise_levels = [0.0, 1e-3, 1e-2, 5e-2, 1e-1, 2e-1]
-    sweep = sindy_noise_sensitivity(noise_levels, seed=SEED, threshold=0.1)
-    print("\n=== Part C: SINDy noise sensitivity (ground truth) ===")
-    for record in sweep:
-        print(f"noise={record['noise']:<6} P={record['precision']:.2f} R={record['recall']:.2f}")
-
-    # --- Part C: held-out DMD forecast ---------------------------------------
-    forecast_out = dmd_forecast(snapshots, n_train=150)
-    print("\n=== Part C: DMD held-out forecast ===")
-    print("train rel-L2    :", f"{forecast_out['train_error']:.2e}")
-    print("test  rel-L2    :", f"{forecast_out['test_error']:.2e}")
-
-    # --- Part B: epidemic dynamics from case counts --------------------------
-    sir = make_sir(beta=0.6, gamma=0.2, t_max=100.0, n_steps=1000)
-    epi = fit_epidemic_dynamics(sir, threshold=0.05)
-    print("\n=== Part B: SIR governing equations (SINDy) ===")
-    print("recovered terms :", sorted(epi["result"].active_terms))
+    print("\n== Part A: divergence rate on systems with KNOWN ground truth ==")
+    lam_lorenz, t_l, _ = _lambda_of(lorenz_twin_ensemble)
+    horizon_lorenz = forecast_horizon(lam_lorenz, eps=1e-7, tol=1.0)
     print(
-        "precision/recall:",
-        round(epi["scores"]["precision"], 3),
-        "/",
-        round(epi["scores"]["recall"], 3),
+        f"    chaotic  Lorenz : lambda={lam_lorenz:+.3f}  (true ~0.905)  "
+        f"horizon(eps=1e-7,tol=1)={horizon_lorenz:.1f} time units"
     )
+    lam_fhn, _, _ = _lambda_of(fhn_twin_ensemble)
+    lam_lin, _, _ = _lambda_of(linear_twin_ensemble)
+    h_fhn = forecast_horizon(lam_fhn, 1e-6, 1.0)
+    h_lin = forecast_horizon(lam_lin, 1e-6, 1.0)
+    print(f"    non-chaos FHN   : lambda={lam_fhn:+.3f}  horizon={h_fhn:.0f} (unbounded)")
+    print(f"    non-chaos linear: rate/step={lam_lin:+.3f}  horizon={h_lin}")
+    print("    -> chaos has a FINITE predictability horizon; the non-chaotic systems do not.")
 
-    # --- Part B: filter a noisy physiological signal -------------------------
-    fhn = make_fitzhugh_nagumo(t_max=200.0, n_steps=2000)
-    clean_sig = np.column_stack([fhn.v, fhn.w])
-    noise_sd = 0.5
-    noisy_sig = clean_sig + noise_sd * rng.standard_normal(clean_sig.shape)
+    print("\n== Part B: the empirical horizon of a real forecast (COVID) ==")
+    y, source = load_covid_incidence()
+    print(f"[jhu_covid] source={source}")
+    run_qc(y, "covid log-incidence")
+    tol = 0.75  # log units (~2.1x multiplicative) -- where the forecast stops being useful
+    horizons = np.array(
+        [
+            empirical_forecast_horizon(
+                *hankel_dmd_forecast(y, embed=14, r=6, n_train=start, n_forecast=28),
+                np.arange(1, 29),
+                tol=tol,
+            )
+            for start in range(360, len(y) - 30, 45)
+        ]
+    )
+    med, hlo, hhi = int(np.median(horizons)), int(horizons.min()), int(horizons.max())
+    print(f"    Hankel-DMD forecast horizon (error > {tol} log units, {len(horizons)} windows):")
+    print(f"      median ~{med} days, range {hlo}-{hhi} days -- it shrinks toward ~1 day near")
+    print("      epidemic turning points, and is longest in stable stretches.")
 
-    # QC golden rule: report signal quality before analysis.
-    qc = qc_signals(noisy_sig.T, fs=float(fhn.t.size) / 200.0, reference=clean_sig.T)
-    print("\n=== Part B: physiological-signal QC ===")
-    print(qc.render())
+    ecg, fs, ecg_source = load_ecg_series()
+    yt, yp = hankel_dmd_forecast(ecg[:2000], embed=20, r=8, n_train=1400, n_forecast=200)
+    h_ecg = empirical_forecast_horizon(
+        yt, yp, np.arange(1, len(yt) + 1) / fs, tol=float(np.std(ecg[:2000]))
+    )
+    print(f"    [mitbih] source={ecg_source}: a linear model reverts to the mean, so its")
+    print(f"      horizon {h_ecg * 1000:.0f} ms is just the quiet inter-beat gap (an honest null).")
 
-    phys = filter_physiological_signal(clean_sig, noisy_sig, process_var=0.05, meas_var=0.25)
-    print("\n=== Part B: Kalman filtering ===")
-    print("raw   L2 error  :", round(phys["error_raw"], 3))
-    print("filt  L2 error  :", round(phys["error_filtered"], 3))
-    print("filter improved :", phys["improved"])
-
-    # --- Part B (real data): apply DMD to a REAL epidemic curve --------------
-    # After validating DMD on a synthetic linear system, apply your dmd_forecast
-    # to a real epidemic curve loaded through the data layer. get_dataset returns
-    # the archived JHU CSSE COVID-19 series when reachable, else a deterministic
-    # synthetic fallback with the SAME (date, cases) shape -- this block runs
-    # identically either way, and prints the source so you know which you got.
-    covid = get_dataset("jhu_covid")
-    print("\n=== Part B (real): epidemic curve via DMD ===")
-    print("data source     :", covid.source)
-    print("provenance      :", covid.provenance)
-    cases = np.asarray(covid.payload["cases"], dtype=float)
-    incidence = np.clip(np.diff(cases), 0.0, None)  # daily new cases
-    smoothed = np.convolve(incidence, np.ones(7) / 7.0, mode="valid")
-    log_inc = np.log1p(smoothed)
-    onset = int(np.argmax(smoothed > 0.01 * smoothed.max()))
-    early = log_inc[onset : onset + min(60, log_inc.size - onset)]
-    n_delays = 10
-    cols = early.size - n_delays + 1
-    covid_snaps = np.stack([early[i : i + cols] for i in range(n_delays)])
-    epi = dmd_forecast(covid_snaps, n_train=int(0.7 * covid_snaps.shape[1]))
-    print("train    rel-L2 :", f"{epi['train_error']:.3f}")
-    print("held-out rel-L2 :", f"{epi['test_error']:.3f}  (short-horizon forecast)")
-
-    # --- Part B (real data): Kalman-filter a REAL physiological signal -------
-    # A single MIT-BIH ECG lead (real via wfdb, else a deterministic ECG-like
-    # fallback with the same payload shape). There is no clean ground truth, so we
-    # report the drop in sample-to-sample roughness (a reference-free noise proxy)
-    # rather than an error against a known signal.
-    ecg = get_dataset("mitbih")
-    print("\n=== Part B (real): ECG via Kalman filter ===")
-    print("data source     :", ecg.source)
-    print("provenance      :", ecg.provenance)
-    ecg_lead = np.asarray(ecg.payload["signal"], dtype=float)[:1500, :1]
-    ecg_qc = qc_signals(ecg_lead.T, fs=float(ecg.payload["fs"]))
-    print(ecg_qc.render())
-    ecg_filtered = kalman_denoise(ecg_lead, process_var=0.02, meas_var=0.5)
-    raw_rough = float(np.mean(np.abs(np.diff(ecg_lead, axis=0))))
-    filt_rough = float(np.mean(np.abs(np.diff(ecg_filtered, axis=0))))
-    print("raw  roughness  :", round(raw_rough, 4))
-    print("filt roughness  :", round(filt_rough, 4))
-    print("roughness drop  :", f"{raw_rough / filt_rough:.1f}x")
-
-    # --- Part D: honest interpretation block ---------------------------------
-    print("\n=== Part D: Interpretation ===")
+    print("\n== Interpretation ==")
     block = interpretation_block(
-        claim="TODO: state your headline claim about DMD/SINDy/Kalman results",
-        confidence="moderate",
-        limitations_list=["TODO: name the real limitations you observed"],
-        evidence="TODO: cite the numbers that justify your confidence",
+        claim=(
+            f"A chaotic system has a finite predictability horizon set by its largest Lyapunov "
+            f"exponent (Lorenz lambda~{lam_lorenz:.2f} gives ~{horizon_lorenz:.0f} time units), "
+            f"while non-chaotic systems (lambda<=0) are predictable indefinitely; a real forecast "
+            f"adds a further model-limited horizon (~{med} days on COVID incidence)."
+        ),
+        confidence="high",
+        limitations_list=[
+            "The finite-time Lyapunov estimate has an alignment-transient bias, so the fit window "
+            "matters; lambda is reported within a tolerance band, not to many digits.",
+            "Intrinsic predictability (the Lyapunov limit) and model-limited predictability (a "
+            "particular forecaster's skill) differ; the real horizon is the latter.",
+            "The linear Hankel-DMD model has essentially no skill on the ECG, and COVID incidence "
+            "is non-stationary, so the empirical horizon collapses exactly when a wave turns.",
+        ],
+        evidence=(
+            "a Lorenz Lyapunov exponent recovered within a tolerance band of the known value "
+            "(the finite-time estimator is biased low by the alignment transient), a clean "
+            "finite-vs-unbounded horizon contrast across chaotic and non-chaotic systems, and a "
+            "finite model-limited horizon measured on real COVID incidence"
+        ),
     )
     print(block)
 
