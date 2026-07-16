@@ -4,13 +4,15 @@
 
 This is a **self-paced, 8-week online course** — enroll and start any time, and move at
 whatever pace suits you. "Week" is simply a unit of coherent material, not a fixed
-schedule. Each week has three parts you work through in order:
+schedule. Each week has two components:
 
-- **Lesson pages** that develop the ideas and the mathematics in plain language.
-- **A hands-on lab** — the lesson opens in Google Colab with one click, so you run and
-  modify the code yourself in the browser, with a free GPU for the deep-learning week.
-- **A problem set**, delivered through GitHub Classroom and automatically graded, that
-  puts the method to work end to end.
+- **A lesson** that develops the ideas and the mathematics in plain language, with fully
+  worked code. Read it on the page, or open the same notebook in Google Colab with one
+  click to run and modify it yourself in the browser (with a free GPU for the
+  deep-learning week).
+- **A problem set** that puts the method to work on a *new* problem the lesson does not
+  solve for you: the reusable pieces are provided, and you implement the missing logic
+  yourself. It is distributed and graded automatically through GitHub Classroom.
 
 ## Tools
 
