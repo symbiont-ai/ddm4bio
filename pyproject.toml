@@ -25,7 +25,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["ruff", "pytest", "pytest-cov", "nbmake", "jupytext", "mypy", "PyWavelets"]
 signals = ["PyWavelets", "mne", "wfdb"]
-singlecell = ["scanpy", "anndata"]
+singlecell = ["scanpy", "anndata", "umap-learn"]
 dynamics = ["pysindy", "pydmd"]
 dl = ["torch"]
 imaging = ["medmnist", "scikit-image", "nibabel"]
