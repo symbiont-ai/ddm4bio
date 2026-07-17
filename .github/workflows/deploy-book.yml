@@ -60,7 +60,16 @@ jobs:
           # a timeout-limited cell (a cold BloodMNIST fetch once exceeded the cell
           # timeout and broke wk1). This step has no per-cell timeout. Only the
           # lesson datasets are warmed -- not heavy unused ones (TCGA/MNE/IXI).
-          python -c "from ddm4bio.datasets import get_dataset; [print('  ['+get_dataset(k).source+']', k) for k in ['bloodmnist','breast_wisconsin','gdsc','heart_uci','jhu_covid','mitbih','pbmc3k']]"
+          #
+          # --require-real FAILS THIS STEP (fast) if any source is unavailable,
+          # after retrying transient outages a few times (e.g. PhysioNet for
+          # mitbih, which has flaked intermittently). Without it, a flaked fetch
+          # would silently fall back, the whole book would build, and only the
+          # post-build guard would fail -- wasting a full build and a manual rerun.
+          # Real fetches are cached, so retries re-hit the network only while a
+          # source is still down.
+          python scripts/fetch_data.py --require-real --retries 3 --delay 15 \
+            bloodmnist breast_wisconsin gdsc heart_uci jhu_covid mitbih pbmc3k
 
       - name: Build the book
         run: |
