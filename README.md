@@ -1,6 +1,6 @@
 # ddm4bio
 
-**Data-Driven Modeling & Scientific Computation for the Life Sciences** — a
+**Data-Driven Methods for the Life Sciences** — a
 reproducible graduate-course repository: a pip-installable teaching library
 (`ddm4bio`) plus lecture-demo notebooks, problem sets, and a capstone.
 

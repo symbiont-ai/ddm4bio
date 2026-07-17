@@ -1,4 +1,6 @@
-# Data-Driven Modeling & Scientific Computation for the Life Sciences
+# Data-Driven Methods for the Life Sciences
+
+*From linear algebra to dynamics to deep learning, on real biomedical data*
 
 Welcome. This is an applications-first course in modern computational science, told
 through the lens of biology and medicine. Rather than starting from abstract theory

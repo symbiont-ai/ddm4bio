@@ -14,6 +14,53 @@ schedule. Each week has two components:
   solve for you: the reusable pieces are provided, and you implement the missing logic
   yourself. It is distributed and graded automatically through GitHub Classroom.
 
+## Prerequisites & who this is for
+
+This is an **intermediate-to-advanced quantitative** course — not a first course in
+programming, statistics, or machine learning. If you already have linear algebra,
+statistics, and Python, you're in the right place. It's meant to be welcoming, not
+gatekeeping.
+
+You'll move fastest if you're comfortable with:
+
+- **Linear algebra** — vectors, matrices, eigenvalues/eigenvectors, and ideally having
+  *seen* the SVD. Week 1 uses eigendecomposition fluently from day one.
+- **Probability & statistics** — distributions, variance, hypothesis testing and
+  p-values, and the idea of a *null distribution*. Weeks 3, 5, and 6 lean on base rates
+  and Bayes, permutation nulls, Type-I error, and selective inference.
+- **Python + NumPy** — comfortable writing *and modifying* scientific code, not writing
+  your first program.
+- **Calculus** — gradients and derivatives (gradient descent, finite-time rates,
+  Jacobians conceptually).
+
+A prior **machine-learning course is recommended, not required.** With one, Weeks 2–3
+and the deep-learning week (8) go smoothly; without one, those are the steep parts —
+reachable, just steeper. Everything else assumes only the bar above.
+
+**Who it's for.** Quantitatively-trained people — CS, math, physics, and engineering
+students, working data scientists, and computationally-inclined biologists and clinicians
+who already have linear algebra, statistics, and Python. It also works as a **refresher
+for practising ML scientists and engineers moving into life-sciences and biomedical
+work**: you get the biomedical framing, the datasets, and the domain-specific pitfalls —
+base-rate traps, double-dipping, real-data QC — mapped onto methods you may already know.
+
+**Rusty? Brush up on** the SVD and eigendecomposition (what singular values mean and how
+to read them), hypothesis testing and null / permutation distributions, and NumPy array
+indexing and linear-algebra calls. Those carry the most weight early on.
+
+**One-glance self-check.** You should be comfortable reading code like this:
+
+```python
+import numpy as np
+
+X = np.random.randn(100, 5)          # 100 samples, 5 features
+U, s, Vt = np.linalg.svd(X, full_matrices=False)
+print(s)                             # singular values, largest first
+print(s**2 / np.sum(s**2))           # variance explained per component
+```
+
+If that reads clearly, you're ready. If not, start with the SVD and NumPy pointers above.
+
 ## Tools
 
 You will work entirely in the modern scientific-Python ecosystem:

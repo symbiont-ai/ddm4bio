@@ -1,4 +1,4 @@
-"""ddm4bio: Data-Driven Modeling & Scientific Computation for the Life Sciences.
+"""ddm4bio: Data-Driven Methods for the Life Sciences.
 
 Shared teaching library for the course. Public entry points are re-exported
 here; heavy optional dependencies (torch, scanpy, mne, ...) are imported lazily

@@ -1,4 +1,4 @@
-# Capstone — Data-Driven Modeling for the Life Sciences
+# Capstone — Data-Driven Methods for the Life Sciences
 
 The capstone is where the course stops being a tour of methods and becomes a
 piece of your own scientific work. You will **design and execute a
