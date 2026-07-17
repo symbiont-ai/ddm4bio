@@ -23,6 +23,12 @@ from ddm4bio.datasets.registry import LoadedDataset
 _ZENODO_RECORD = "10519652"
 _ZENODO_BASE = f"https://zenodo.org/records/{_ZENODO_RECORD}/files"
 
+#: Course-controlled durability mirror (a GitHub Release on this repo) holding the SAME
+#: real ``.npz`` files, redistributed under CC BY 4.0. Tried only when the upstream Zenodo
+#: fetch fails, so a Zenodo outage or rate-limit does not freeze the build. Not every subset
+#: is mirrored -- an un-mirrored name simply 404s here and drops to the synthetic fallback.
+_MIRROR_BASE = "https://github.com/symbiont-ai/ddm4bio/releases/download/data-mirror-v1"
+
 #: Keys expected inside every MedMNIST 2D ``.npz`` archive.
 _NPZ_KEYS = (
     "train_images",
@@ -144,11 +150,22 @@ def load_medmnist(
         )
 
     cache_path = cache_dir / f"{name}.npz"
-    url = f"{_ZENODO_BASE}/{name}.npz?download=1"
+    upstream_url = f"{_ZENODO_BASE}/{name}.npz?download=1"
+    mirror_url = f"{_MIRROR_BASE}/{name}.npz"
     try:
         cache_dir.mkdir(parents=True, exist_ok=True)
+        origin = "cache"
         if not cache_path.exists():
-            _download(url, cache_path)
+            try:
+                _download(upstream_url, cache_path)
+                origin = "upstream"
+            except Exception:
+                # Upstream (Zenodo) unreachable: pull the SAME real .npz from the
+                # course mirror (CC BY 4.0). Still real data, so the build stays real
+                # and publishable. If the mirror is also gone, this raises and the
+                # outer handler drops to the labelled synthetic fallback.
+                _download(mirror_url, cache_path)
+                origin = "mirror"
         with np.load(cache_path, allow_pickle=False) as archive:
             keys = set(archive.files)
             if not set(_NPZ_KEYS).issubset(keys):
@@ -156,10 +173,14 @@ def load_medmnist(
                     f"{cache_path.name} is missing MedMNIST keys; found {sorted(keys)}"
                 )
             payload = {k: archive[k] for k in archive.files}
+        origin_desc = {
+            "cache": f"cached {name}.npz",
+            "upstream": f"{upstream_url} (Zenodo record {_ZENODO_RECORD})",
+            "mirror": f"course mirror {mirror_url} (Zenodo record {_ZENODO_RECORD}, CC BY 4.0)",
+        }
         provenance = (
-            f"real MedMNIST v2 {name!r} from {url} (Zenodo record "
-            f"{_ZENODO_RECORD}); CC BY 4.0; per-split 2D image arrays "
-            "(N,H,W,C) uint8 with integer class labels."
+            f"real MedMNIST v2 {name!r} from {origin_desc[origin]}; CC BY 4.0; "
+            "per-split 2D image arrays (N,H,W,C) uint8 with integer class labels."
         )
         return LoadedDataset(payload=payload, source="real", provenance=provenance, key=name)
     except Exception as exc:  # noqa: BLE001 - fall back on any real-fetch failure

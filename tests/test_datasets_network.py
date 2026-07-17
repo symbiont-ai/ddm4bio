@@ -52,3 +52,47 @@ def test_heart_uci_real_download():
     assert len(payload["X"]) > 0
     assert len(payload["X"]) == len(payload["y"])
     assert set(payload["y"].unique()).issubset({0, 1})
+
+
+def test_bloodmnist_mirror_when_upstream_down(tmp_path, monkeypatch):
+    """With Zenodo unreachable, BloodMNIST still loads REAL data from the course mirror.
+
+    Points the upstream base at a dead host and uses a fresh cache, so the loader must
+    fall through to the GitHub-Release mirror. The result must be real (guard-safe: no
+    ``fallback``/``synthetic`` in provenance) with the true BloodMNIST shape.
+    """
+    import ddm4bio.datasets.medmnist_images as mm
+
+    monkeypatch.setattr(mm, "_ZENODO_BASE", "https://zenodo.invalid.nonexistent/files")
+    loaded = mm.load_medmnist(cache_dir=tmp_path, key="bloodmnist", seed=0)
+
+    assert isinstance(loaded, LoadedDataset)
+    assert loaded.source == "real"
+    assert "course mirror" in loaded.provenance
+    assert "fallback" not in loaded.provenance and "synthetic" not in loaded.provenance
+    images = loaded.payload["train_images"]
+    assert images.ndim == 4 and images.shape[1:] == (28, 28, 3)
+
+
+def test_mitbih_mirror_when_upstream_down(tmp_path, monkeypatch):
+    """With PhysioNet unreachable, MIT-BIH still loads REAL data from the course mirror.
+
+    Forces ``wfdb.dl_database`` to raise (as a PhysioNet outage would) and uses a fresh
+    cache, so the loader must fetch the record files from the GitHub-Release mirror and
+    read them with ``rdrecord``. The result must be the real record at fs=360 Hz.
+    """
+    wfdb = pytest.importorskip("wfdb")
+    import ddm4bio.datasets.physio as ph
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("PhysioNet unreachable (simulated)")
+
+    monkeypatch.setattr(wfdb, "dl_database", _boom)
+    loaded = ph.load_mitbih(cache_dir=tmp_path, record="100", seed=0)
+
+    assert isinstance(loaded, LoadedDataset)
+    assert loaded.source == "real"
+    assert "course mirror" in loaded.provenance
+    assert "fallback" not in loaded.provenance and "synthetic" not in loaded.provenance
+    assert loaded.payload["fs"] == 360.0
+    assert loaded.payload["signal"].shape[0] > 100_000

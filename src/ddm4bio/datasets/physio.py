@@ -26,6 +26,43 @@ _PN_DIR = "mitdb"
 _MITBIH_URL = "https://physionet.org/content/mitdb/1.0.0/"
 _LICENSE = "Open Data Commons Attribution License v1.0 (PhysioNet)"
 
+#: Course-controlled durability mirror (a GitHub Release on this repo) holding the SAME real
+#: record files, redistributed under the PhysioNet ODC-BY license. Tried only when PhysioNet
+#: itself is unreachable, so an outage does not freeze the build. Files are named
+#: ``mitbih_{record}{ext}``; an un-mirrored record 404s and drops to the synthetic fallback.
+_MIRROR_BASE = "https://github.com/symbiont-ai/ddm4bio/releases/download/data-mirror-v1"
+
+
+def _download_record_from_mirror(rec_dir: Path, record: str) -> None:
+    """Fetch a MIT-BIH record's files from the course mirror into ``rec_dir``.
+
+    Serves the SAME real PhysioNet record (redistributed under ODC-BY) when PhysioNet is
+    unreachable. ``.hea`` and ``.dat`` are required to read the signal; ``.atr`` (beat
+    annotations) is best-effort. Raises if a required file is missing so the caller can
+    drop to the synthetic fallback.
+    """
+    import urllib.error
+    import urllib.request
+
+    got: list[str] = []
+    for ext, required in ((".hea", True), (".dat", True), (".atr", False)):
+        url = f"{_MIRROR_BASE}/mitbih_{record}{ext}"
+        dest = rec_dir / f"{record}{ext}"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "ddm4bio/0.1"})
+            with urllib.request.urlopen(req, timeout=60.0) as resp:
+                data = resp.read()
+        except urllib.error.HTTPError as exc:
+            if not required and exc.code == 404:
+                continue
+            raise
+        tmp = dest.with_suffix(dest.suffix + ".part")
+        tmp.write_bytes(data)
+        tmp.replace(dest)
+        got.append(ext)
+    if ".hea" not in got or ".dat" not in got:
+        raise RuntimeError(f"course mirror is missing required files for record {record!r}")
+
 
 def _synthetic_ecg(
     *, seed: int | None, fs: float = 360.0, duration_s: float = 10.0
@@ -122,14 +159,23 @@ def load_mitbih(
         rec_dir.mkdir(parents=True, exist_ok=True)
         header_path = rec_dir / f"{record}.hea"
 
+        origin = "cache"
         if not header_path.exists():
-            # Download record files (.hea/.dat and annotations) into the cache.
-            wfdb.dl_database(
-                _PN_DIR,
-                str(rec_dir),
-                records=[record],
-                annotators="all",
-            )
+            try:
+                # Real fetch: pull the record (.hea/.dat + annotations) from PhysioNet.
+                wfdb.dl_database(
+                    _PN_DIR,
+                    str(rec_dir),
+                    records=[record],
+                    annotators="all",
+                )
+                origin = "upstream"
+            except Exception:
+                # PhysioNet unreachable: pull the SAME real record from the course
+                # mirror (ODC-BY). Still real data, so the build stays real. If the
+                # mirror is also gone this raises and drops to the synthetic fallback.
+                _download_record_from_mirror(rec_dir, record)
+                origin = "mirror"
 
         rec = wfdb.rdrecord(str(rec_dir / record))
 
@@ -148,14 +194,17 @@ def load_mitbih(
             "fs": fs,
             "sig_names": sig_names,
         }
+        origin_desc = {
+            "cache": f"cached record {record!r}",
+            "upstream": f"{_MITBIH_URL} record {record!r} (pn_dir={_PN_DIR!r})",
+            "mirror": f"course mirror of {_MITBIH_URL} record {record!r} ({_LICENSE})",
+        }
         return LoadedDataset(
             payload=payload,
             source="real",
             provenance=(
-                f"{_MITBIH_URL} record {record!r} (pn_dir={_PN_DIR!r}); "
-                f"license: {_LICENSE}. MIT-BIH Arrhythmia Database "
-                "single-channel/2-lead ECG at fs=360 Hz; cached under "
-                f"{rec_dir}."
+                f"real MIT-BIH Arrhythmia Database ECG from {origin_desc[origin]}; "
+                f"license: {_LICENSE}; single-/2-lead at fs=360 Hz; cached under {rec_dir}."
             ),
             key=_KEY,
         )
