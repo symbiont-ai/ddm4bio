@@ -20,8 +20,8 @@ You will work entirely in the modern scientific-Python ecosystem:
 
 - **NumPy** and **SciPy** for numerical arrays, linear algebra, and signal processing.
 - **scikit-learn** for classical machine learning.
-- **PyTorch** for neural networks and deep learning (optional — the deep-learning lab
-  runs a dependency-light NumPy demonstration, with PyTorch as an extension).
+- **PyTorch** for neural networks and deep learning — the Week-8 lesson trains small
+  models device-agnostically (a free Colab GPU when one is available, otherwise CPU).
 - **Jupyter** notebooks as the interactive computing environment (run in Google Colab).
 - **GitHub** for version control, reproducibility, and sharing your work.
 
@@ -40,8 +40,9 @@ Kutz's textbook lives largely in its data-methods chapters. We spend our time on
 - **Dynamics learned from data** — dynamic mode decomposition (DMD), Koopman-operator
   ideas, sparse identification of nonlinear dynamics (SINDy), and data assimilation /
   Kalman filtering.
-- **Deep learning** — autoencoders, sensing-and-reconstruction architectures,
-  reinforcement learning, and transformer / foundation models.
+- **Deep learning** — linear and nonlinear autoencoders and sensing-and-reconstruction
+  (SHRED) architectures in Week 8; reinforcement learning and transformer /
+  foundation-model embeddings in the capstone.
 
 ## What the course de-emphasizes
 
@@ -69,6 +70,7 @@ By the end of the course, you should be able to:
    especially in the small-sample regime typical of clinical data.
 6. **Discover dynamics from measurements** using DMD, SINDy, and data-assimilation /
    filtering methods, and use them to forecast and to filter noisy time series.
-7. **Apply modern deep learning** — autoencoders, reinforcement learning, and
-   transformer-based models — to representation learning, control, and clinical-text and
-   sequence problems, with an eye to when the added complexity is warranted.
+7. **Apply modern deep learning** — train autoencoders (linear and nonlinear) and
+   sensing-and-reconstruction (SHRED) models for representation learning and field
+   reconstruction, and extend to reinforcement learning and transformer / foundation-model
+   embeddings in the capstone — with an eye to when the added complexity is warranted.
