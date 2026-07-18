@@ -1,65 +1,18 @@
 """Honest-interpretation helpers for ddm4bio notebooks.
 
-Every ddm4bio notebook must end its analysis with an explicit *interpretation
-block*: a claim, a stated confidence level backed by evidence, and a named list
-of limitations. These helpers format that block as **Markdown** and render it
-with :func:`show_interpretation`, so the claim, evidence, and limitations wrap
-and read as prose -- rather than an over-long, horizontally-scrolling line of
-monospaced ``print`` output that hides the claim off the right edge.
+Every ddm4bio notebook ends its analysis with an explicit *interpretation block*:
+a plain-language claim plus a named list of limitations. These helpers format that
+block as **Markdown** and render it with :func:`show_interpretation`, so the claim
+and limitations wrap and read as prose -- rather than an over-long, horizontally
+scrolling line of monospaced ``print`` output.
 
 See ``docs/INTERPRETATION.md`` for the convention and ``docs/METHOD_LABELING.md``
-for the surrounding honesty policy.
+for the surrounding honesty policy. There is deliberately no separate "confidence"
+rating: how much to trust the claim belongs in the claim itself and in the named
+limitations, not in a one-word label.
 """
 
 from __future__ import annotations
-
-# Allowed confidence levels, from weakest to strongest evidence.
-_VALID_CONFIDENCE = ("low", "moderate", "high")
-
-
-def confidence_statement(claim: str, confidence: str | None, evidence: str | None = None) -> str:
-    """Format the claim plus its confidence and optional evidence as Markdown.
-
-    Leads with the claim as a sentence, then a separate bold
-    ``**Confidence: <LEVEL>.**`` run, so the confidence *qualifies* the claim
-    instead of being read as the claim itself.
-
-    Parameters
-    ----------
-    claim: the substantive claim being made about the results.
-    confidence: one of ``"low"``, ``"moderate"``, or ``"high"``. Any other
-        value raises :class:`ValueError`.
-    evidence: optional description of the evidence that justifies the stated
-        confidence level (e.g. effect size, sample size, cross-validation).
-
-    Returns
-    -------
-    str
-        Markdown of the form::
-
-            **Interpretation.** <claim>
-
-            **Confidence: MODERATE.** <evidence>
-
-    Raises
-    ------
-    ValueError
-        If ``confidence`` is not one of the allowed levels.
-    """
-    if confidence is None:                       # opt out of a confidence line entirely
-        lead = f"**Interpretation.** {claim.strip()}"
-        return f"{lead}\n\n{evidence.strip()}" if evidence else lead
-
-    level = confidence.strip().lower()
-    if level not in _VALID_CONFIDENCE:
-        raise ValueError(f"confidence must be one of {_VALID_CONFIDENCE!r}, got {confidence!r}")
-
-    parts = [f"**Interpretation.** {claim.strip()}", ""]
-    conf = f"**Confidence: {level.upper()}.**"
-    if evidence:
-        conf += f" {evidence.strip()}"
-    parts.append(conf)
-    return "\n".join(parts)
 
 
 def limitations(items: list[str]) -> str:
@@ -81,46 +34,32 @@ def limitations(items: list[str]) -> str:
     return f"**Limitations:**\n\n{body}"
 
 
-def interpretation_block(
-    claim: str,
-    confidence: str | None,
-    limitations_list: list[str],
-    evidence: str | None = None,
-) -> str:
-    """Build the standard interpretation block for a notebook, as Markdown.
+def interpretation_block(claim: str, limitations_list: list[str]) -> str:
+    """Build the standard interpretation block as Markdown.
 
-    Combines :func:`confidence_statement` and :func:`limitations`. Render it with
+    A claim, a blank line, then the named limitations. Render it with
     :func:`show_interpretation` (not ``print``) so it wraps as prose.
 
     Parameters
     ----------
-    claim: the substantive claim being made about the results.
-    confidence: one of ``"low"``, ``"moderate"``, or ``"high"``.
+    claim: the substantive, plain-language claim about the results, stated with
+        whatever quantitative backing belongs in it.
     limitations_list: named limitations of the analysis.
-    evidence: optional description of the supporting evidence.
 
     Returns
     -------
     str
-        Markdown: the confidence statement, a blank line, then the limitations.
-
-    Raises
-    ------
-    ValueError
-        If ``confidence`` is not one of the allowed levels.
+        Markdown: ``**Interpretation.** <claim>`` then the limitations block.
     """
-    header = confidence_statement(claim, confidence, evidence)
-    body = limitations(limitations_list)
-    return f"{header}\n\n{body}"
+    return f"**Interpretation.** {claim.strip()}\n\n{limitations(limitations_list)}"
 
 
 def show_interpretation(block: str) -> None:
     """Render a Markdown interpretation block in a notebook.
 
-    ``block`` is the Markdown string returned by :func:`interpretation_block`.
-    Rendering it as Markdown -- rather than ``print``-ing it -- lets the claim,
-    evidence, and each limitation wrap to the page width, instead of overflowing
-    a single monospaced line that scrolls the claim out of view.
+    ``block`` is the Markdown string from :func:`interpretation_block`. Rendering it
+    as Markdown -- rather than ``print``-ing it -- lets the claim and each limitation
+    wrap to the page width instead of overflowing a single monospaced line.
     """
     from IPython.display import Markdown, display
 
