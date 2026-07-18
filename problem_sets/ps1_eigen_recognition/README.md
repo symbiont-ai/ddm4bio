@@ -15,9 +15,10 @@ BloodMNIST.
 
 The eigen-basis primitives (`eigen_basis`, `project`, `reconstruct`) and the data
 loader are **provided** — this problem set is about what you *do* with the
-subspace, not rebuilding it. Fill in the functions marked `# TODO` in
-`student/ps1.py`. The autograder checks each on its own seeded fixtures, so keep
-the signatures exactly as given.
+subspace, not rebuilding it. `eigen_basis` computes the basis with
+`numpy.linalg.svd` directly, exactly as the Week 1 lesson does. Fill in the
+functions marked `# TODO` in `student/ps1.py`. The autograder checks each on its
+own seeded fixtures, so keep the signatures exactly as given.
 
 ## Data
 
@@ -34,7 +35,7 @@ The clean image lives (approximately) in a few principal axes, while additive
 noise spreads across all of them. So projecting a noisy image onto the top-*k*
 eigen-subspace and reconstructing it keeps the signal and discards most of the
 noise — but only at the right rank: too few modes throw away signal, too many
-re-admit noise, so the SNR-vs-rank curve rises, peaks, and falls.
+re-admit noise, so the SNR-vs-rank curve rises to a peak and then flattens or falls.
 
 Implement:
 
@@ -44,7 +45,7 @@ Implement:
   (use the provided `project` / `reconstruct`).
 - `best_rank_for_denoising(x_train, x_noisy, x_clean, candidate_ks)` — the rank
   whose denoising maximizes SNR against the clean images, and the SNR-vs-rank
-  curve. Understand *why* the curve is single-peaked.
+  curve. Understand *why* it rises then flattens or falls.
 
 ## Part B — Flag out-of-QC images by reconstruction error
 
@@ -58,11 +59,12 @@ Implement:
 
 - `reconstruction_anomaly_score(x, mean, components)` — per-image relative
   reconstruction error against the normal subspace.
-- `detection_auc(scores, is_anomaly)` — ROC-AUC of the detector (chance 0.5,
-  perfect 1.0).
-- `flag_threshold(scores_normal, max_false_alarm)` — a cutoff set at the
-  `(1 − max_false_alarm)` quantile of the normal scores, which bounds the
-  false-alarm rate.
+
+That per-image score is the one novel, subspace-specific piece you write. The
+provided driver then **evaluates** it with the standard tools directly — you do
+not reimplement them: `sklearn.metrics.roc_auc_score` for the detection ROC-AUC
+(chance 0.5, perfect 1.0), and `numpy.quantile` at the `(1 − max_false_alarm)`
+quantile of the *normal* scores for a false-alarm-bounded cutoff.
 
 ## Quality control & interpretation (required)
 

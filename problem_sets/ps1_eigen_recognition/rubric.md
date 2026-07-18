@@ -14,19 +14,21 @@ credit for the affected part.
   reconstructs; leaves a signal already in the basis (near-)unchanged and beats
   the noisy input on a low-rank signal.
 - **`best_rank_for_denoising` (12).** Returns the SNR-vs-rank curve and the rank
-  that maximizes it (the true argmax, not a guess); the curve is single-peaked,
-  and enough modes to span the signal beat far too few.
+  that maximizes it (the true argmax, not a guess); the curve rises to a peak and
+  then flattens or falls, and enough modes to span the signal beat far too few.
 
 ## Part B — Out-of-QC detection — 30 points
 
-- **`reconstruction_anomaly_score` (12).** Per-image relative reconstruction
+- **`reconstruction_anomaly_score` (20).** Per-image relative reconstruction
   error; non-negative, correctly shaped, and cleanly higher for images pushed
-  off the subspace than for normal ones.
-- **`detection_auc` (8).** Correct ROC-AUC — 1.0 for perfectly separated scores,
-  0.5 for identical distributions.
-- **`flag_threshold` (10).** The `(1 − max_false_alarm)` quantile of the normal
-  scores; empirically bounds the false-alarm rate and tightens as the target
-  shrinks.
+  off the subspace than for normal ones. This is the only function implemented in
+  Part B — the novel, subspace-specific piece.
+- **Correct evaluation in the driver (10).** The pool is scored and then evaluated
+  with the standard tools directly — `sklearn.metrics.roc_auc_score` for the
+  detection AUC and `numpy.quantile` at the `(1 − max_false_alarm)` quantile of the
+  *normal* scores for a false-alarm-bounded cutoff. Graded on using the right tool
+  correctly (correct argument order, normal-only threshold), not on reimplementing
+  either one.
 
 ## Quality control — 20 points
 
@@ -38,9 +40,11 @@ credit for the affected part.
 
 ## Interpretation & honesty — 15 points
 
-- A clear `interpretation_block` -- a claim stated with the
-  evidence actually generated (the single-peaked SNR curve, the leakage-checked
-  split, the AUC with a false-alarm-bounded threshold).
+- A clear `interpretation_block` whose **claim carries its own numbers** (the SNR
+  gain and the AUC) — there is no separate confidence rating; the uncertainty
+  lives in the claim and the limitations. The evidence it draws on is the
+  SNR-vs-rank curve, the leakage-checked split, and the AUC with a
+  false-alarm-bounded threshold.
 - At least two honest, specific limitations — e.g. that the noise is synthetic
   additive Gaussian unlike real acquisition artifacts, that the SNR gain and AUC
   are single held-out estimates, or that a linear subspace can miss nonlinear

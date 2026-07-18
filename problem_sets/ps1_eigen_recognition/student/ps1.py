@@ -10,8 +10,8 @@ new uses on real BloodMNIST:
   the signal-to-noise ratio (SNR).
 - Part B -- **out-of-QC detection**: an image that does not fit the normal
   subspace reconstructs badly, so its reconstruction error is a novelty score.
-  Flag corrupted acquisitions and report detection AUC + a false-alarm-bounded
-  threshold.
+  You implement that score; the driver then evaluates it with scikit-learn's
+  ``roc_auc_score`` and a NumPy ``quantile`` threshold directly.
 
 Fill in every function body marked ``# TODO``. The eigen-basis primitives
 (``eigen_basis``, ``project``, ``reconstruct``), the data loader, the noise
@@ -25,10 +25,8 @@ unimplemented function.
 from __future__ import annotations
 
 import numpy as np
-
 from ddm4bio.config import GLOBAL_SEED, seed_everything
 from ddm4bio.interpret import interpretation_block
-from ddm4bio.methods.decomposition import svd_lowrank
 from ddm4bio.qc.report import assert_no_leakage
 
 # --------------------------------------------------------------------------- #
@@ -44,9 +42,8 @@ def load_blood_cells(
     Returns ``(X_train, X_test, source, provenance)``. ``X_train`` is the library
     of *clean, normal* cells we model; ``X_test`` is held out.
     """
-    from sklearn.model_selection import train_test_split
-
     from ddm4bio.datasets import get_dataset
+    from sklearn.model_selection import train_test_split
 
     ds = get_dataset("bloodmnist", seed=seed)
     images = ds.payload["train_images"]  # (N, H, W, C) uint8
@@ -58,10 +55,14 @@ def load_blood_cells(
 
 
 def eigen_basis(x: np.ndarray, n_modes: int) -> tuple[np.ndarray, np.ndarray]:
-    """(provided, from Week 1) Per-feature mean + top-``n_modes`` principal axes."""
+    """(provided, from Week 1) Per-feature mean + top-``n_modes`` principal axes.
+
+    Computed with NumPy's SVD directly, exactly as the Week 1 lesson does it: the
+    right singular vectors of the mean-centred library are the eigen-images.
+    """
     mean_vec = x.mean(axis=0)
-    _u, _s, vt = svd_lowrank(x - mean_vec, n_modes)
-    return mean_vec, vt
+    _u, _s, vt = np.linalg.svd(x - mean_vec, full_matrices=False)
+    return mean_vec, vt[:n_modes]
 
 
 def project(x: np.ndarray, mean_vec: np.ndarray, components: np.ndarray) -> np.ndarray:
@@ -116,7 +117,8 @@ def best_rank_for_denoising(
 
     Returns ``(best_k, snr_by_k)`` where ``snr_by_k[i]`` is the output SNR (dB) at
     ``candidate_ks[i]``. Too few modes underfit the signal; too many re-admit
-    noise, so the curve peaks at an intermediate rank.
+    noise, so the curve typically peaks at an intermediate rank (and can plateau
+    once enough modes span the signal).
     """
     # TODO: build snr_by_k by looping over candidate_ks (fit eigen_basis on
     # x_train, denoise x_noisy, snr_db vs x_clean); best_k is the k with the
@@ -142,25 +144,9 @@ def reconstruction_anomaly_score(
     raise NotImplementedError("Implement reconstruction_anomaly_score.")
 
 
-def detection_auc(scores: np.ndarray, is_anomaly: np.ndarray) -> float:
-    """ROC-AUC of the anomaly ``scores`` against binary ground truth ``is_anomaly``.
-
-    AUC = probability a random anomaly scores higher than a random normal image;
-    0.5 is chance, 1.0 is perfect separation.
-    """
-    # TODO: return sklearn.metrics.roc_auc_score(is_anomaly, scores) as a float.
-    raise NotImplementedError("Implement detection_auc.")
-
-
-def flag_threshold(scores_normal: np.ndarray, max_false_alarm: float) -> float:
-    """Score threshold that flags at most ``max_false_alarm`` of NORMAL images.
-
-    Setting the cutoff at the ``(1 - max_false_alarm)`` quantile of the normal
-    scores bounds the false-alarm (false-positive) rate at ``max_false_alarm``.
-    """
-    # TODO: return the (1 - max_false_alarm) quantile of scores_normal
-    # (np.quantile is handy).
-    raise NotImplementedError("Implement flag_threshold.")
+# The detection metric and the flag threshold are *standard tools*, so the driver
+# below calls them directly -- sklearn.metrics.roc_auc_score for the ROC-AUC and
+# numpy.quantile for the false-alarm-bounded cutoff. Nothing to implement here.
 
 
 # --------------------------------------------------------------------------- #
@@ -187,6 +173,8 @@ def run_qc(x_train: np.ndarray, x_test: np.ndarray) -> None:
 
 def main() -> None:
     """Run denoising + out-of-QC detection end to end and interpret the results."""
+    from sklearn.metrics import roc_auc_score
+
     seed_everything()
     x_train, x_test, source, provenance = load_blood_cells()
     print(f"Application data: BloodMNIST via get_dataset -> source={source}")
@@ -216,14 +204,17 @@ def main() -> None:
     is_anomaly = np.concatenate([np.zeros(len(x_test)), np.ones(len(x_corrupt))])
     mean_vec, components = eigen_basis(x_train, best_k)
     scores = reconstruction_anomaly_score(pool, mean_vec, components)
-    auc = detection_auc(scores, is_anomaly)
-    thr = flag_threshold(scores[is_anomaly == 0], max_false_alarm=0.05)
+    # Evaluate with the standard tools directly: ROC-AUC from scikit-learn, and a
+    # false-alarm-bounded cutoff at the (1 - target) quantile of the normal scores.
+    max_false_alarm = 0.05
+    auc = roc_auc_score(is_anomaly, scores)
+    thr = np.quantile(scores[is_anomaly == 0], 1.0 - max_false_alarm)
     detected = float(np.mean(scores[is_anomaly == 1] > thr))
     false_alarm = float(np.mean(scores[is_anomaly == 0] > thr))
     print(f"  detection AUC = {auc:.3f}")
     print(
-        f"  threshold at 5% target false-alarm: flags {detected:.0%} of corrupt "
-        f"cells (actual false-alarm {false_alarm:.0%})"
+        f"  threshold at {max_false_alarm:.0%} target false-alarm: flags {detected:.0%} of "
+        f"corrupt cells (actual false-alarm {false_alarm:.0%})"
     )
 
     print("\n== Interpretation ==")
