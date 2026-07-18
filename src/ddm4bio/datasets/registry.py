@@ -293,6 +293,22 @@ DATASET_REGISTRY: dict[str, DatasetSpec] = {
         loader="ddm4bio.datasets.tabular:load_breast_wisconsin",
         used_by=("wk2", "wk3", "wk6", "ps2", "ps3", "ps6"),
     ),
+    "warfarin": DatasetSpec(
+        key="warfarin",
+        name="Warfarin PK/PD (single oral dose)",
+        modality="timeseries",
+        tier="open",
+        license="GPL (>=3) (nlmixr2data); data O'Reilly & Aggeler (1968), Holford (1986)",
+        citation=(
+            "O'Reilly & Aggeler (1968), Studies on coumarin anticoagulant drugs, "
+            "Circulation 38(1):169-177; Holford (1986), Clinical pharmacokinetics "
+            "and pharmacodynamics of warfarin, Clin. Pharmacokinet. 11(6):483-504; "
+            "distributed in the nlmixr2data R package."
+        ),
+        url="https://rdrr.io/github/nlmixr2/nlmixr2data/man/warfarin.html",
+        loader="ddm4bio.datasets.pharma:load_warfarin",
+        used_by=("capstone",),
+    ),
 }
 
 

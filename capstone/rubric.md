@@ -111,8 +111,7 @@ separate a data-driven *result* from a data-driven *mistake*.
 
 3. **Ground-truth validation before trusting real data.** Before you believe a
    number computed on real data, your pipeline must recover a *known* answer on
-   a control: a synthetic fixture from `ddm4bio.datasets.synthetic`, a held-out
-   split, a positive/negative control, or a published benchmark. "It ran without
+   a control: here, the PK fit recovering warfarin's **known ~1.5-day half-life** and Q-learning recovering the **value-iteration optimum**; more generally a synthetic fixture, a held-out split, or a published benchmark. "It ran without
    error" is not validation. Show the validation metric.
 
 4. **Reproducibility.** Seeds are pinned (`seed_everything`), dependencies are

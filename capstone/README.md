@@ -1,114 +1,101 @@
-# Capstone — Data-Driven Methods for the Life Sciences
+# Capstone — Warfarin PK/PD to a Dosing Policy
 
 The capstone is where the course stops being a tour of methods and becomes a
-piece of your own scientific work. You will **design and execute a
-reproducible pipeline** that applies course methods to a biomedical question
-you care about, and you will defend not just your answer but the *process* that
-produced it.
+single piece of scientific work. You carry **real warfarin pharmacokinetic /
+pharmacodynamic (PK/PD) data** through the whole `ddm4bio` arc — from raw
+measurements to a **defensible dosing policy** — and defend not just the answer
+but the *process* that produced it.
 
-The course follows J. N. Kutz, *Data-Driven Modeling & Scientific Computation*.
-This capstone reuses the teaching library (`ddm4bio`) you have used all term:
-the same loaders, QC checks, decompositions, dynamics/learning methods,
-validation metrics, and interpretation helpers. You are not asked to reinvent
-them — you are asked to *compose* them into a defensible analysis.
+This is a **designed** project: one dataset, one multi-step pipeline, one hybrid
+at its core. Everyone works the same problem, so what is graded is depth and
+rigor, not novelty of topic.
 
 ---
 
-## What you must build
+## Why warfarin
 
-A self-contained project that takes a biomedical dataset from raw input to a
-calibrated, interpreted conclusion, wired together as a single runnable
-pipeline. Concretely, your pipeline must:
+Warfarin is the ideal teaching drug: a narrow therapeutic index, real bleeding
+toxicity, large patient-to-patient variability, and — crucially — a *measurable
+effect*. The dataset is real: 32 subjects, a single oral dose, plasma warfarin
+concentration (`dvid == "cp"`) **and** the anticoagulation effect PCA
+(prothrombin-complex activity, `dvid == "pca"`, a stand-in for INR) over ~6 days,
+with weight / age / sex covariates. Source: O'Reilly & Aggeler (1968),
+popularized by Holford (1986), distributed in the `nlmixr2data` package (GPL ≥3).
 
-1. **Frame** a specific biomedical question that a data-driven method can
-   actually answer (not "explore the data").
-2. **Load** a dataset (real, or a defensible synthetic/semi-synthetic proxy)
-   through a reproducible loader.
-3. **Quality-control the data before drawing any conclusion** — and report the
-   QC, including what you decided to drop or keep and why.
-4. Apply **at least TWO course methods**, one from each group below.
-5. **Validate against ground truth** before you trust results on real data
-   (a synthetic fixture with a known answer, a held-out split, a positive/
-   negative control, or a published benchmark).
-6. **Interpret** the result with an explicit, calibrated confidence level and a
-   stated list of limitations.
-7. Ship it so **someone else can reproduce your numbers** from a clean clone.
+```python
+from ddm4bio.datasets import get_dataset
+ds = get_dataset("warfarin")   # real data, cached; synthetic PK/PD fallback offline
+df = ds.payload                # tidy: id, time, amt, dv, dvid, evid, wt, age, sex
+```
 
-### The two-method requirement
+## The hybrid at the core
 
-You must use **one method from each column**. Using two methods from the same
-column does not satisfy the requirement.
+The capstone braids the course's two paradigms into one pipeline:
 
-| Group A — representation / decomposition | Group B — learning / dynamics |
-|------------------------------------------|-------------------------------|
-| SVD / PCA                                | Supervised or unsupervised ML |
-| Robust PCA                               | DMD / SINDy                   |
-| ICA                                      | Kalman filtering              |
-| Wavelets / compressed sensing            | Autoencoder                   |
+- **Model-driven:** you *fit a mechanistic PK/PD model* to real concentration and
+  effect data — a model whose parameters mean something and can be validated
+  against known pharmacology.
+- **Data-driven:** you then *learn a dosing policy* by reinforcement learning on
+  a dosing environment **calibrated from that fit**.
 
-The two methods must be *connected*: the Group A representation should feed, or
-be justified by, the Group B step (e.g. PCA denoising before a classifier; SVD
-truncation before DMD; ICA source separation before a state-space model). A
-pipeline where the two methods never interact will not score well on framing.
+A mechanistic model, grounded in real data, becomes the environment a learned
+policy is optimized on. That is the "combine the paradigms" of the course's first
+learning outcome, made concrete.
 
-Every method you report must map to a named function in `ddm4bio` (or a clearly
-documented, tested extension of it). **No silent method swaps**: if you change
-the method after your proposal, say so and say why.
+## What you build — the arc
 
----
+| Step | Group | What you do | `ddm4bio` |
+|------|-------|-------------|-----------|
+| 1. QC + frame | — | Load warfarin; inspect sampling, doses, covariates, both channels, outliers **before** any modeling | `get_dataset`, `qc_tabular` |
+| 2. Fit PK | A (model) | Fit a one-compartment oral PK model per subject; **validate** the recovered elimination half-life against warfarin's known ~1–2.5 days | `scipy.optimize` (wk2) |
+| 3. Fit PD | A (model) | Characterize the anticoagulation effect and its link to exposure (a turnover / indirect-response model, or an exposure→effect fit); this defines the therapeutic *effect* target | ODE / optimization (wk2, wk7) |
+| 4. Characterize variability | B (data) | Reduce and cluster the per-patient PK/PD parameters; relate the spread to covariates (does weight explain clearance?) | `pca_reduce`, clustering, `select_k`, `bh_fdr` (wk5–6) |
+| 5. Calibrate the environment | — | Build a dosing environment whose clearance is drawn from the **fitted** patient-to-patient spread | `PKDosingEnv` |
+| 6. Learn the policy | B (data) | Recover the optimal dosing policy: value iteration (model-based ground truth) + Q-learning (model-free) | `value_iteration`, `q_learning` (wk8 §5) |
+| 7. Validate + interpret | — | Show the fit recovers known pharmacology, the learner reaches the optimum, and the policy holds the effect in-window **better than a fixed dose**; close with an interpretation block | `policy_value`, `interpretation_block` |
 
-## Suggested tracks
+The two methods are *connected by construction*: the Group-A fit **is** what
+calibrates the Group-B environment. A pipeline whose steps do not feed each other
+does not score well on framing.
 
-Pick one track, or propose your own with equivalent rigor. Each row is a
-starting point, not a script — the example question is meant to be sharpened.
+## Milestones
 
-| Track | Typical data | Group A → Group B pipeline | Example question |
-|-------|--------------|----------------------------|------------------|
-| **Single-cell / omics** | scRNA-seq counts (e.g. PBMC), bulk expression | QC + normalize → **PCA/SVD** embedding → **unsupervised clustering** (+ marker interpretation) | Do the transcriptomic clusters correspond to known cell types, and how stable are they to subsampling? |
-| **Neuro signals** | EEG/LFP/MEG multichannel time series | **ICA** artifact/source separation → **supervised ML** or **Kalman** state tracking | Can independent components separate a stimulus-locked source from blink/line-noise artifacts? |
-| **Physiological dynamics** | ECG/respiration/glucose, wearable streams | **wavelets/CS** denoise & compress → **DMD/SINDy** dynamics | What low-dimensional dynamics govern the beat-to-beat signal, and are the modes stable across segments? |
-| **Medical imaging** | MRI slices, MedMNIST tiles | **robust PCA** background/foreground split → **autoencoder** or **classifier** | Does a low-rank + sparse decomposition isolate lesion-like structure that a classifier can then use? |
-| **Epidemic / population** | Case/incidence time series (e.g. SIR-like) | **SVD/PCA** of the trajectory ensemble → **DMD/SINDy** to recover rates | Can we recover epidemic growth/decay modes from noisy incidence, and how does noise degrade them? |
-| **Sequence / foundation** | Embeddings from a sequence/foundation model | **PCA/ICA** of the embedding space → **supervised ML** probe | Do learned embedding axes carry a biologically meaningful, linearly decodable signal? |
+Three graded milestones. Dates are on the course schedule; the deliverables are
+fixed.
 
-Each track has ground-truth options: a synthetic generator in
-`ddm4bio.datasets.synthetic` with a known answer, plus a held-out real split.
-Use the synthetic one first to prove your pipeline is correct, *then* run it on
-real data.
+| Milestone | Deliverable | Must contain |
+|-----------|-------------|--------------|
+| **1 — Proposal** | `proposal.md` (1–2 pages) | Your QC of the real data; your PK (and PD) model choice, named as the fit you will run; your **validation plan** (which known quantity — e.g. the half-life — anchors the fit); the risk you are most worried about. |
+| **2 — Checkpoint** | Running pipeline through Step 6 + a progress note | PK fit that **recovers the known half-life**, the variability characterization, a calibrated environment, and Q-learning recovering the value-iteration optimum on a fixture. The "prove it before you trust it" gate. |
+| **3 — Final** | Report + code + presentation | `report.md` filled from the template (all mandated sections), the reproducible pipeline (`make data && make run && make report` from a clean clone), and a short talk: fit → variability → policy → the in-range-vs-fixed-dose result → confidence → limitations. |
 
----
+**Reproducibility bar:** a grader clones your repo, runs `make data && make run`,
+and reproduces every headline number in your report (within a documented
+tolerance), using pinned seeds and pinned dependencies.
 
-## Timeline & deliverables
+## The reference pipeline
 
-Three graded milestones. Dates are set on the course schedule; the deliverables
-are fixed.
-
-| Milestone | Deliverable | What it must contain |
-|-----------|-------------|----------------------|
-| **1 — Proposal** | `proposal.md` (1–2 pages) | The biomedical question; chosen track; the two methods (one per group) named as `ddm4bio` functions; the dataset and its access/licence; the **ground-truth validation plan**; the risk you are most worried about. |
-| **2 — Checkpoint** | Running pipeline on **synthetic/ground-truth data** + short progress note | End-to-end pipeline that loads → QC → both methods → interpretation on a fixture with a *known* answer, plus the validation metric showing the pipeline recovers it. This is the "prove it works before you trust it" gate. |
-| **3 — Final** | Final report + code + presentation | `report.md` filled from the template (all mandated sections), the reproducible pipeline (`make data && make run && make report` from a clean clone), and a short presentation of framing, method, result, confidence, and limitations. |
-
-**Reproducibility bar for the final:** a grader clones your repo, runs
-`make data && make run`, and reproduces every headline number in your report
-(within a documented tolerance), using pinned seeds and pinned dependencies.
-
----
-
-## Getting started
+[`template/src/pipeline.py`](template/src/pipeline.py) runs the **entire arc**
+end-to-end on the real data (and on a synthetic PK/PD fallback offline). It is
+your **skeleton, not your deliverable** — each step is deliberately minimal (a
+per-subject PK fit, a three-point clearance spread, a default RL environment).
+Your job is to deepen it: a proper turnover PD fit, a covariate-aware variability
+model, held-out-patient validation, a therapeutic window tied to an INR target.
 
 ```bash
 cp -r capstone/template capstone/submissions/<your-name>
 cd capstone/submissions/<your-name>
-make data      # materialize demo/synthetic inputs
-make run       # load -> QC -> decomposition + dynamics/learning -> interpretation
-make report    # check the report has every mandated section
+make data      # fetch + cache the warfarin dataset
+make run       # load -> QC -> PK/PD fit -> variability -> calibrate -> RL -> validate
+make report    # check the report has every mandated section, in order
 ```
 
-The template runs end-to-end on bundled synthetic data with only the core
-`ddm4bio` stack installed — no network, no heavy extras. Swap in your dataset
-and your two methods, keep the section structure, and keep it reproducible.
+## Read the rubric first
 
-Read [`rubric.md`](rubric.md) before you start: the **non-negotiable standards**
-(QC before conclusions, no silent method swaps, ground-truth validation before
-trusting real data, reproducibility) are pass/fail gates, not point deductions.
+The [`rubric.md`](rubric.md) **non-negotiable standards** (QC before conclusions,
+no silent method swaps, ground-truth validation before trusting results,
+reproducibility) are pass/fail gates, not point deductions.
+
+> **Not a clinical tool.** This is a pedagogical pipeline. Real warfarin dosing
+> uses validated nomograms and INR monitoring; nothing here prescribes anything
+> for real patients, and your interpretation must say so.
