@@ -17,6 +17,9 @@ parts:
       - file: lessons/wk6_cluster_classify
       - file: lessons/wk7_dynamics
       - file: lessons/wk8_deep_learning
+  - caption: Capstone
+    chapters:
+      - file: capstone
   - caption: Reference
     chapters:
       - file: references

@@ -12,17 +12,18 @@ credit for brilliance.
 ## Weighted criteria (100%)
 
 ### Scientific framing — 15%
-Is there a real biomedical question, and does the chosen pipeline actually
-answer *that* question?
+Are the modeling choices justified, and does the pipeline actually answer the
+warfarin dosing question?
 
-- **Excellent** — A sharp, falsifiable question; the two methods are chosen
-  *because* the question demands them, and they are connected (Group A feeds or
-  justifies Group B). The reader understands why this analysis, on this data,
-  answers this question.
-- **Adequate** — A reasonable question and sensible methods, but the link
-  between question and method is asserted rather than argued.
-- **Weak** — "Explore the dataset." Methods chosen because they were covered,
-  not because the question needs them.
+- **Excellent** — The PK/PD model, the therapeutic target, and the calibration
+  are justified by the data and the pharmacology, and the reader understands why
+  the mechanistic fit *and* the learned policy — connected, the fit calibrating
+  the policy — answer the dosing question on this data.
+- **Adequate** — Reasonable modeling choices, but the link between the fit and
+  the policy (or how the therapeutic target is defined) is asserted rather than
+  argued.
+- **Weak** — The reference pipeline run essentially unchanged, or modeling
+  choices left unexplained and the fit and policy not clearly connected.
 
 ### Method rigor & correctness — 25%
 Are the two methods used correctly, with the right assumptions, parameters, and
