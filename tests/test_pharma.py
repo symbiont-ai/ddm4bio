@@ -10,6 +10,7 @@ contract (tidy schema, both dvid channels) must hold.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from ddm4bio.datasets.pharma import load_warfarin
 
@@ -45,6 +46,7 @@ def test_fallback_has_pkpd_shape(tmp_path):
     assert pca[-1] > pca.min()
 
 
+@pytest.mark.network
 def test_loader_contract_holds_for_whichever_source(tmp_path):
     # Real if reachable (network + pyreadr), else the fallback -- either way the
     # tidy schema and both measurement channels must be present.
