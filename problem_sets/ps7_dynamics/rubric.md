@@ -5,25 +5,26 @@ with a short read of the submitted code and interpretation. All work must run
 offline and deterministically; a submission that only passes because it hard-codes
 expected numbers or disables a check earns no credit for the affected part.
 
-## Part A — The six estimators — 60 points
+## Part A — The four estimators — 60 points
 
 Each function is checked against a **closed-form** answer, so a copied physical number
 cannot earn credit.
 
-- **`separation_curve` (8).** The per-timestep Euclidean distance between two
-  trajectories; a constant offset of norm 5 returns 5 everywhere.
 - **`ensemble_log_divergence` (12).** Averages the **logs** of the separations (not the
   raw separations) — identical rows return `ln(row)` exactly, and the non-identical case
   distinguishes log-then-average from the wrong average-then-log.
-- **`divergence_rate` (14).** Least-squares slope of the mean-log separation over the
-  (provided) fit window; recovers a known synthetic rate to machine precision, and a
-  *different* planted rate defeats a hard-coded constant.
 - **`finite_time_rate` (10).** A **local** finite-difference slope (not one global slope);
   reads the correct rate in the plateau and exposes the transient/saturation at the ends.
 - **`forecast_horizon` (8).** The formula `T = (1/λ)·ln(tol/eps)`, and — mandatory —
   returns `inf` when `λ ≤ 0` (a non-chaotic system never diverges).
 - **`empirical_forecast_horizon` (8).** The first time the forecast error exceeds `tol`,
   with correct first-crossing (not last) and a censored endpoint when it never crosses.
+- **Correct computation in the driver (22).** The twin-pair separation and the Lyapunov
+  slope are *standard NumPy one-liners*, so the driver computes them directly —
+  `numpy.linalg.norm(b − a, axis=1)` for the per-timestep separation and
+  `numpy.polyfit(t[s:e], mls[s:e], 1)[0]` for the least-squares divergence rate over the
+  provided fit window. Graded on using the right call correctly (norm along the state axis;
+  slope of the mean-log separation over the window), not on reimplementing either one.
 
 ## Part A — The chaotic-vs-non-chaotic contrast — 15 points
 
@@ -60,13 +61,11 @@ cannot earn credit.
 
 | Test | Rubric area |
 | --- | --- |
-| `test_separation_curve_is_the_euclidean_distance` | Part A: `separation_curve` |
 | `test_ensemble_log_divergence_averages_logs_not_raw` | Part A: `ensemble_log_divergence` |
-| `test_divergence_rate_recovers_a_known_slope` | Part A: `divergence_rate` |
 | `test_finite_time_rate_is_a_local_derivative` | Part A: `finite_time_rate` |
 | `test_forecast_horizon_formula_and_infinite_for_non_chaotic` | Part A: `forecast_horizon` |
 | `test_empirical_forecast_horizon_first_crossing_and_censoring` | Part A: `empirical_forecast_horizon` |
-| `test_chaotic_vs_non_chaotic_horizon_contrast` | Part A: the physical contrast |
+| `test_chaotic_vs_non_chaotic_horizon_contrast` | Part A: the physical contrast + driver `norm`/`polyfit` |
 
 A passing autograder is necessary but not sufficient: the QC and interpretation
 credit is awarded for honest, well-argued analysis, not merely green tests.

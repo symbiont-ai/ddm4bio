@@ -13,9 +13,10 @@ at a given penalty. This problem set asks the harder question you face when you 
 answer is **cross-validation** — score each candidate on data it was not fit on,
 and let held-out error choose. You never look at the ground truth to decide.
 
-The model-fitting primitives (`np.polyfit` / `np.polyval`, the provided `lasso_fit`)
-and the fold splitter (`kfold_indices`) are **provided** — this problem set is
-about *selecting* with them, not re-deriving them. Fill in the functions marked
+The model-fitting primitives — `np.polyfit` / `np.polyval` for the curve and
+scikit-learn's `Lasso` for the sparse fit — are called directly, and the fold
+splitter (`kfold_indices`) is **provided**; this problem set is about *selecting*
+with them, not re-deriving them. Fill in the functions marked
 `# TODO` in `student/ps2.py`. The autograder checks each on its own seeded
 fixtures, so keep the signatures exactly as given.
 
@@ -49,7 +50,7 @@ Cross-validate the Lasso penalty to pick the feature set that generalizes.
 Implement:
 
 - `lasso_cv_mse(x, y, alpha, folds)` — mean out-of-sample MSE of a Lasso at penalty
-  `alpha` (use the provided `lasso_fit`).
+  `alpha` (fit scikit-learn's `Lasso` directly and predict with `model.predict`).
 - `select_alpha(x, y, candidate_alphas, folds)` — the penalty minimizing
   cross-validated MSE, and the curve.
 - `selected_features(x, y, alpha)` — indices of the nonzero-coefficient features.

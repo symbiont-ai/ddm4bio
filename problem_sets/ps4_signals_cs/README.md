@@ -14,11 +14,11 @@ Compressed sensing does not degrade gracefully — below a sharp threshold recov
 fails completely, above it recovery succeeds. You will map that limit, and watch it
 move as the signal gets denser.
 
-The L1 solver (`compressed_sensing_recon`) and the sparse-signal generator
-(`make_sparse`) are **provided** — this problem set is about mapping the sampling
-limit, not re-deriving the recovery algorithm. Fill in the functions marked `# TODO`
-in `student/ps4.py`. The autograder checks each on small seeded synthetic signals,
-so keep the signatures exactly as given.
+The sparse-signal generator (`make_sparse`) is **provided** — this problem set is
+about mapping the sampling limit, not re-deriving the recovery algorithm. Recovery
+itself is a one-call L1/Lasso fit you write in `recover` (scikit-learn's `Lasso`).
+Fill in the functions marked `# TODO` in `student/ps4.py`. The autograder checks each
+on small seeded synthetic signals, so keep the signatures exactly as given.
 
 ## Data
 
@@ -39,7 +39,7 @@ For a fixed sparsity, find the sharp failure→success transition. Implement:
 - `measurement_matrix(m, n, rng)` — a random Gaussian sensing matrix of shape
   `(m, n)`, scaled by `1/√m`.
 - `recover(signal, matrix)` — take measurements `y = matrix @ signal` and
-  reconstruct with the provided `compressed_sensing_recon`.
+  reconstruct them with an L1/Lasso fit (scikit-learn's `Lasso`, `fit_intercept=False`).
 - `recovery_error(recovered, true_signal)` — relative L2 error
   `‖recovered − true‖ / ‖true‖`.
 - `recovery_error_curve(signal, m_values, seed, n_trials)` — recovery error vs. the

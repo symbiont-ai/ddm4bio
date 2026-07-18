@@ -9,9 +9,10 @@ expected numbers or disables a check earns no credit for the affected part.
 
 - **`measurement_matrix` (10).** Shape `(m, n)` with `m` rows (measurements) and `n`
   columns (signal length), Gaussian entries scaled by `1/√m`.
-- **`recover` (12).** Forms the measurements `y = matrix @ signal`, calls the
-  provided `compressed_sensing_recon`, and returns a length-`n` reconstruction. On a
-  well-measured signal (`m ≫ k`) the recovery is close to the truth.
+- **`recover` (12).** Forms the measurements `y = matrix @ signal`, recovers with an
+  L1/Lasso fit (scikit-learn's `Lasso`, `fit_intercept=False`, imported inside the
+  body), and returns a length-`n` reconstruction. On a well-measured signal
+  (`m ≫ k`) the recovery is close to the truth.
 - **`recovery_error` (8).** Relative L2 error `‖recovered − true‖ / ‖true‖`; zero for
   a perfect recovery, one when the estimate is twice the truth.
 - **`recovery_error_curve` (13).** Averages the recovery error over `n_trials` random

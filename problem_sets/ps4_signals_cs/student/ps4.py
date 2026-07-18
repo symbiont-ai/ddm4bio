@@ -13,11 +13,11 @@ limit.
   measurements grow with it (m* ~ a few per nonzero) -- the boundary that governs
   every compressed acquisition.
 
-Fill in every function body marked ``# TODO``. The reconstruction primitive
-(`compressed_sensing_recon`) and the sparse-signal generator (`make_sparse`), the QC
-driver, and `main` are provided -- this problem set is about mapping the limit, not
-re-deriving the L1 solver. The autograder imports these functions by name, so keep
-the signatures exactly as given. Run with ``python ps4.py``; it stops at the first
+Fill in every function body marked ``# TODO``. The sparse-signal generator
+(`make_sparse`), the QC driver, and `main` are provided -- this problem set is about
+mapping the limit, not re-deriving the sparse recovery (`recover` is a one-call
+L1/Lasso fit). The autograder imports these functions by name, so keep the
+signatures exactly as given. Run with ``python ps4.py``; it stops at the first
 unimplemented function.
 """
 
@@ -27,7 +27,6 @@ import numpy as np
 
 from ddm4bio.config import GLOBAL_SEED, seed_everything
 from ddm4bio.interpret import interpretation_block
-from ddm4bio.methods.signals import compressed_sensing_recon  # noqa: F401  (use in recover)
 
 # --------------------------------------------------------------------------- #
 # Provided: sparse signals + a real ECG (do not edit)                          #
@@ -73,11 +72,14 @@ def measurement_matrix(m: int, n: int, rng: np.random.Generator) -> np.ndarray:
 def recover(signal: np.ndarray, matrix: np.ndarray) -> np.ndarray:
     """Take compressed measurements ``y = matrix @ signal`` and reconstruct the signal.
 
-    Uses the provided `compressed_sensing_recon(y, matrix)` L1 solver.
+    CS recovery IS an L1/Lasso fit -- call sklearn Lasso directly with
+    ``fit_intercept=False``.
     """
-    # TODO: form the measurements y = matrix @ signal, call
-    # compressed_sensing_recon(y, matrix), and return the reconstruction as a
-    # length-len(signal) 1-D array.
+    # TODO: CS recovery IS an L1/Lasso fit -- call sklearn Lasso directly with
+    # fit_intercept=False. Form the measurements y = matrix @ signal, then fit
+    # sklearn.linear_model.Lasso(alpha=1e-3, fit_intercept=False, selection="random",
+    # random_state=None, max_iter=5000) on (matrix, y) and return its .coef_ as a
+    # length-len(signal) 1-D array. Import Lasso inside the function body.
     raise NotImplementedError("Implement recover.")
 
 

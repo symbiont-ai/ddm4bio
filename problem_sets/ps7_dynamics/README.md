@@ -15,7 +15,7 @@ trajectories diverge (the largest Lyapunov exponent); for a non-chaotic system i
 unbounded.
 
 > The systems, the integrators, the twin-trajectory plumbing, the fit-window heuristic, and
-> the real forecaster are all **provided**; you build the six estimator functions. The core
+> the real forecaster are all **provided**; you build the four estimator functions. The core
 > synthetic result needs *no model fit at all* — just twin-trajectory divergence and a slope.
 
 Fill in the functions marked `# TODO` in `student/ps7.py`. Each is checked against a
@@ -33,14 +33,16 @@ Seed everything through `ddm4bio.seed_everything()` (called in `main`).
 
 ## Part A — The divergence rate and the horizon
 
-- `separation_curve(traj_a, traj_b)` — per-timestep `‖b−a‖` of a twin pair.
 - `ensemble_log_divergence(sep_curves, floor)` — average the **logs** of the separations.
-- `divergence_rate(t, mean_log_sep, window)` — the least-squares slope over the growth
-  window: the largest Lyapunov exponent.
 - `finite_time_rate(t, mean_log_sep, half)` — the **local** slope (its plateau is λ).
 - `forecast_horizon(lam, eps, tol)` — `T = (1/λ)·ln(tol/eps)`, or `inf` for `λ ≤ 0`.
 - `empirical_forecast_horizon(y_true, y_pred, t, tol)` — the first time a real forecast's
   error exceeds `tol` (censored if it never does).
+
+The per-timestep separation and the least-squares Lyapunov slope are standard NumPy
+one-liners, so the provided driver computes them directly — `numpy.linalg.norm(b − a, axis=1)`
+for the separation and `numpy.polyfit(t[s:e], mls[s:e], 1)[0]` for the divergence rate over the
+provided fit window — you do not reimplement them.
 
 Recovering Lorenz's λ within a tolerance band (the finite-time estimator sits a little below
 the true ~0.905) and separating chaotic (finite horizon ~18 time units) from non-chaotic

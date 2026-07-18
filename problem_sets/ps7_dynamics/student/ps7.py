@@ -16,7 +16,7 @@ diverge (the largest Lyapunov exponent); for a non-chaotic system the horizon is
 
 Fill in every function body marked ``# TODO``. The systems, the integrators, the
 twin-trajectory plumbing, the fit-window heuristic, the real forecaster, and ``main`` are
-provided -- this problem set is about the six estimator functions, not the dynamics. The
+provided -- this problem set is about the four estimator functions, not the dynamics. The
 autograder imports these functions by name, so keep the signatures exactly as given. Run with
 ``python ps7.py``; it stops at the first unimplemented function.
 """
@@ -207,15 +207,6 @@ def run_qc(series: np.ndarray, label: str) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def separation_curve(traj_a: np.ndarray, traj_b: np.ndarray) -> np.ndarray:
-    """Per-timestep Euclidean separation ``||traj_b(t) - traj_a(t)||`` of a twin pair.
-
-    Each trajectory has shape ``(n_time, n_state)``; returns a ``(n_time,)`` curve.
-    """
-    # TODO: return the Euclidean norm of (traj_b - traj_a) along the state axis (axis=1).
-    raise NotImplementedError("Implement separation_curve.")
-
-
 def ensemble_log_divergence(sep_curves: np.ndarray, floor: float = 1e-12) -> np.ndarray:
     """Mean over pairs of ``ln(separation)`` at each time (the Lyapunov ensemble estimator).
 
@@ -225,19 +216,6 @@ def ensemble_log_divergence(sep_curves: np.ndarray, floor: float = 1e-12) -> np.
     # TODO: take np.log(np.maximum(sep_curves, floor)) and average over the pair axis (axis=0).
     # Averaging the LOGS (not logging the average) is what makes this a Lyapunov estimator.
     raise NotImplementedError("Implement ensemble_log_divergence.")
-
-
-def divergence_rate(
-    t: np.ndarray, mean_log_sep: np.ndarray, window: tuple[int, int] | None = None
-) -> float:
-    """Largest Lyapunov exponent: the least-squares slope of ``mean_log_sep`` vs ``t``.
-
-    Fit over ``window = (start, end)`` indices (the exponential-growth region) if given, else
-    the full range. Positive for chaos, ~0 or negative for a non-chaotic system.
-    """
-    # TODO: if window is given, slice t and mean_log_sep to [start:end]; return the slope of a
-    # degree-1 np.polyfit(t, mean_log_sep, 1)[0] as a float.
-    raise NotImplementedError("Implement divergence_rate.")
 
 
 def finite_time_rate(t: np.ndarray, mean_log_sep: np.ndarray, half: int = 5) -> np.ndarray:
@@ -274,6 +252,12 @@ def empirical_forecast_horizon(
     raise NotImplementedError("Implement empirical_forecast_horizon.")
 
 
+# The twin-pair separation and the Lyapunov slope are *standard NumPy one-liners*, so the
+# driver below computes them directly -- ``np.linalg.norm(b - a, axis=1)`` for the per-timestep
+# separation, and ``np.polyfit(t[s:e], mls[s:e], 1)[0]`` for the least-squares divergence rate
+# over the provided fit window. Nothing to implement here.
+
+
 # --------------------------------------------------------------------------- #
 # Provided: driver                                                             #
 # --------------------------------------------------------------------------- #
@@ -282,7 +266,8 @@ def empirical_forecast_horizon(
 def _lambda_of(ensemble_fn) -> tuple[float, np.ndarray, np.ndarray]:
     seps, t = ensemble_fn()
     mls = ensemble_log_divergence(seps)
-    lam = divergence_rate(t, mls, select_exponential_window(t, mls))
+    s, e = select_exponential_window(t, mls)
+    lam = float(np.polyfit(t[s:e], mls[s:e], 1)[0])
     return lam, t, mls
 
 
@@ -292,13 +277,15 @@ def main() -> None:
 
     print("== Part A: unit checks on closed-form fixtures ==")
     grid = np.linspace(0.0, 5.0, 50)
+    a_demo = np.zeros((3, 3))
+    b_demo = a_demo + [3, 4, 0]
     print(
         f"    separation of constant offset [3,4,0] = "
-        f"{separation_curve(np.zeros((3, 3)), np.zeros((3, 3)) + [3, 4, 0])[0]:.1f} (=5)"
+        f"{np.linalg.norm(b_demo - a_demo, axis=1)[0]:.1f} (=5)"
     )
     print(
         f"    divergence_rate of exp(0.9 t)         = "
-        f"{divergence_rate(grid, np.log(1e-7) + 0.9 * grid):.3f} (=0.9)"
+        f"{np.polyfit(grid, np.log(1e-7) + 0.9 * grid, 1)[0]:.3f} (=0.9)"
     )
     print(
         f"    forecast_horizon(0.9, 1e-7, 1)        = {forecast_horizon(0.9, 1e-7, 1.0):.1f}  |  "

@@ -14,7 +14,7 @@ and builds a procedure that actually controls the error.
   methods keep real signal.
 - Part B -- **apply the calibrated protocols to real PBMC3k and interpret honestly**.
 
-Fill in every function body marked ``# TODO``. The clustering (`kmeans_cluster`), the
+Fill in every function body marked ``# TODO``. The clustering (`sklearn`'s `KMeans`), the
 t-test (`per_feature_ttest`), BH-FDR (`bh_fdr`), the fixtures, `assign_to_centroids`,
 and `estimate_sigma` are provided -- this problem set is about the testing *procedure*,
 not the machinery. The autograder imports these functions by name, so keep the
@@ -30,7 +30,6 @@ import numpy as np
 
 from ddm4bio.config import GLOBAL_SEED, seed_everything
 from ddm4bio.interpret import interpretation_block
-from ddm4bio.methods.clustering import kmeans_cluster  # noqa: F401  (use in the protocols)
 from ddm4bio.methods.learning import bh_fdr  # noqa: F401  (use in the protocols)
 
 # --------------------------------------------------------------------------- #
@@ -164,13 +163,15 @@ def cluster_then_test_naive(
 ) -> dict:
     """The double-dipping baseline: cluster ALL the data, then test between the clusters.
 
-    Cluster every row with ``kmeans_cluster``, run ``per_feature_ttest`` between the two
-    clusters, BH-correct at ``alpha``. Because the partition was fit to separate the very
-    rows being tested, this over-rejects on data with no real groups.
+    Cluster every row with k-means (`sklearn`'s `KMeans`), run ``per_feature_ttest`` between
+    the two clusters, BH-correct at ``alpha``. Because the partition was fit to separate the
+    very rows being tested, this over-rejects on data with no real groups.
     """
-    # TODO: labels = kmeans_cluster(X, k, seed=seed); pvalues = per_feature_ttest(X, labels);
-    # fdr = bh_fdr(pvalues, alpha). Return a dict with keys "labels", "pvalues", "qvalues",
-    # "reject" (fdr["reject"]), and "n_reject" (int(reject.sum())).
+    # TODO: import KMeans from sklearn.cluster inside this function;
+    # labels = KMeans(n_clusters=k, random_state=seed, n_init=10).fit_predict(X);
+    # pvalues = per_feature_ttest(X, labels); fdr = bh_fdr(pvalues, alpha). Return a dict with
+    # keys "labels", "pvalues", "qvalues", "reject" (fdr["reject"]), and
+    # "n_reject" (int(reject.sum())).
     raise NotImplementedError("Implement cluster_then_test_naive.")
 
 
@@ -184,7 +185,9 @@ def cluster_then_test_splitsample(
     are assigned from B's own feature values -- the circularity survives the split.
     """
     # TODO: rng = np.random.default_rng(seed); perm = rng.permutation(len(X)); split into
-    # disjoint idx_a, idx_b at the midpoint. Cluster X[idx_a] with kmeans_cluster;
+    # disjoint idx_a, idx_b at the midpoint. Import KMeans from sklearn.cluster inside this
+    # function and cluster X[idx_a] with
+    # KMeans(n_clusters=k, random_state=seed, n_init=10).fit_predict(X[idx_a]);
     # centroids = _centroids_from_labels(X[idx_a], labels_a, k); labels_b =
     # assign_to_centroids(X[idx_b], centroids); pvalues = per_feature_ttest(X[idx_b],
     # labels_b); BH-correct. Return {"labels_test", "pvalues", "qvalues", "reject",
@@ -207,7 +210,8 @@ def cluster_then_test_datathin(
     random with respect to the test data and the false-discovery rate stays at nominal.
     """
     # TODO: rng = np.random.default_rng(seed); eps = rng.standard_normal(X.shape) * sigma;
-    # X1 = X + eps, X2 = X - eps. labels = kmeans_cluster(X1, k, seed=seed);
+    # X1 = X + eps, X2 = X - eps. Import KMeans from sklearn.cluster inside this function;
+    # labels = KMeans(n_clusters=k, random_state=seed, n_init=10).fit_predict(X1);
     # pvalues = per_feature_ttest(X2, labels); BH-correct. Return {"labels", "pvalues",
     # "qvalues", "reject", "n_reject"}.
     raise NotImplementedError("Implement cluster_then_test_datathin.")

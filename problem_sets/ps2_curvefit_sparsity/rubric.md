@@ -17,9 +17,9 @@ credit for the affected part.
 
 ## Part B — Sparse feature selection — 40 points
 
-- **`lasso_cv_mse` (12).** Out-of-sample MSE of a Lasso at a given penalty (fit with
-  the provided `lasso_fit`, predict `X @ coef + intercept`); an over-large penalty
-  generalizes worse.
+- **`lasso_cv_mse` (12).** Out-of-sample MSE of a Lasso at a given penalty (fit
+  scikit-learn's `Lasso` directly, predict with `model.predict`); an over-large
+  penalty generalizes worse.
 - **`select_alpha` (10).** Returns the CV-MSE curve and the penalty that minimizes
   it; the strongest penalty is not chosen (it underfits).
 - **`selected_features` (8).** Correct nonzero-coefficient indices; fewer features

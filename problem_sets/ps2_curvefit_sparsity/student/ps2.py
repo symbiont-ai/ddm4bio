@@ -12,12 +12,13 @@ and let held-out error choose.
   the biomarker set that generalizes. On synthetic data with a known driver set you
   measure recovery; on real breast-cytology data you read off a panel.
 
-Fill in every function body marked ``# TODO``. The model-fitting primitives
-(`np.polyfit`/`np.polyval`, the provided `lasso_fit`), the fold splitter
-(`kfold_indices`), the data generators, the QC driver, and `main` are provided —
-this problem set is about *selecting* with them, not re-deriving them. The
-autograder imports these functions by name, so keep the signatures exactly as
-given. Run with ``python ps2.py``; it stops at the first unimplemented function.
+Fill in every function body marked ``# TODO``. You fit polynomials with
+`np.polyfit`/`np.polyval` and a Lasso with scikit-learn's `Lasso` directly (import
+it inside the function bodies that use it). The fold splitter (`kfold_indices`), the
+data generators, the QC driver, and `main` are provided — this problem set is about
+*selecting* with them, not re-deriving them. The autograder imports these functions
+by name, so keep the signatures exactly as given. Run with ``python ps2.py``; it
+stops at the first unimplemented function.
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from ddm4bio.config import GLOBAL_SEED, seed_everything
 from ddm4bio.interpret import interpretation_block
 
 # --------------------------------------------------------------------------- #
-# Provided: data + fitting primitives (do not edit)                            #
+# Provided: data generators + fold splitter (do not edit)                      #
 # --------------------------------------------------------------------------- #
 
 
@@ -76,14 +77,6 @@ def kfold_indices(n: int, folds: int = 5, seed: int = GLOBAL_SEED) -> list[np.nd
     return [np.sort(part) for part in np.array_split(order, folds)]
 
 
-def lasso_fit(x: np.ndarray, y: np.ndarray, alpha: float) -> tuple[np.ndarray, float]:
-    """(provided) Fit an L1-penalized linear model; return ``(coef, intercept)``."""
-    from sklearn.linear_model import Lasso
-
-    model = Lasso(alpha=alpha, max_iter=10000).fit(x, y)
-    return model.coef_, float(model.intercept_)
-
-
 # --------------------------------------------------------------------------- #
 # Part A -- Model-complexity selection by cross-validation  (you implement)    #
 # --------------------------------------------------------------------------- #
@@ -124,11 +117,12 @@ def select_degree(
 def lasso_cv_mse(x: np.ndarray, y: np.ndarray, alpha: float, folds: list[np.ndarray]) -> float:
     """Cross-validated MSE of a Lasso fit at penalty ``alpha``.
 
-    For each held-out fold: `lasso_fit` on the OTHER folds, predict the held-out
-    rows (`X @ coef + intercept`), and average the MSE.
+    For each held-out fold: fit a Lasso on the OTHER folds, predict the held-out
+    rows (`model.predict`), and average the MSE.
     """
-    # TODO: like poly_cv_mse, but fit with the provided lasso_fit(x_train, y_train,
-    # alpha) -> (coef, intercept) and predict x_test @ coef + intercept.
+    # TODO: like poly_cv_mse, but fit sklearn.linear_model.Lasso(alpha=alpha,
+    # max_iter=10000).fit(x_train, y_train) (import Lasso inside this function) and
+    # predict the held-out rows with model.predict(x_test).
     raise NotImplementedError("Implement lasso_cv_mse.")
 
 
@@ -146,7 +140,8 @@ def select_alpha(
 
 def selected_features(x: np.ndarray, y: np.ndarray, alpha: float) -> np.ndarray:
     """Indices of the features with a nonzero Lasso coefficient at ``alpha``."""
-    # TODO: fit lasso_fit(x, y, alpha) and return np.flatnonzero(coef).
+    # TODO: fit sklearn.linear_model.Lasso(alpha=alpha, max_iter=10000).fit(x, y)
+    # (import Lasso inside this function) and return np.flatnonzero(model.coef_).
     raise NotImplementedError("Implement selected_features.")
 
 
