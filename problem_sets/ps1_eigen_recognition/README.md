@@ -4,8 +4,8 @@
 
 **Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
 
-**Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 2
-(the SVD and low-rank approximation).
+**Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 15
+(the SVD, PCA, and low-rank approximation).
 
 Week 1 built an eigen-image basis and used it to *recognize* blood cells. This
 problem set keeps that basis but asks a different question: if the top principal
