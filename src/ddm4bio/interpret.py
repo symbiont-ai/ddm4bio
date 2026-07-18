@@ -17,7 +17,7 @@ from __future__ import annotations
 _VALID_CONFIDENCE = ("low", "moderate", "high")
 
 
-def confidence_statement(claim: str, confidence: str, evidence: str | None = None) -> str:
+def confidence_statement(claim: str, confidence: str | None, evidence: str | None = None) -> str:
     """Format the claim plus its confidence and optional evidence as Markdown.
 
     Leads with the claim as a sentence, then a separate bold
@@ -46,6 +46,10 @@ def confidence_statement(claim: str, confidence: str, evidence: str | None = Non
     ValueError
         If ``confidence`` is not one of the allowed levels.
     """
+    if confidence is None:                       # opt out of a confidence line entirely
+        lead = f"**Interpretation.** {claim.strip()}"
+        return f"{lead}\n\n{evidence.strip()}" if evidence else lead
+
     level = confidence.strip().lower()
     if level not in _VALID_CONFIDENCE:
         raise ValueError(f"confidence must be one of {_VALID_CONFIDENCE!r}, got {confidence!r}")
@@ -79,7 +83,7 @@ def limitations(items: list[str]) -> str:
 
 def interpretation_block(
     claim: str,
-    confidence: str,
+    confidence: str | None,
     limitations_list: list[str],
     evidence: str | None = None,
 ) -> str:

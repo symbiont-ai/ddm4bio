@@ -70,3 +70,16 @@ def test_interpretation_block_combines_content():
 def test_interpretation_block_rejects_invalid_level():
     with pytest.raises(ValueError):
         interpretation_block("a claim", "definitely", ["a limitation"])
+
+
+def test_confidence_statement_allows_no_confidence():
+    text = confidence_statement("a plain claim", None)
+    assert text.startswith("**Interpretation.**")
+    assert "a plain claim" in text
+    assert "Confidence" not in text
+
+
+def test_interpretation_block_allows_no_confidence():
+    text = interpretation_block("the claim", None, ["a limitation"])
+    assert "Confidence" not in text
+    assert "the claim" in text and "a limitation" in text
