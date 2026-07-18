@@ -1,8 +1,7 @@
 """Clustering with stability diagnostics for Week-6 teaching.
 
-Wrappers around scikit-learn clustering (k-means, Gaussian mixtures,
-agglomerative) plus model-selection helpers (silhouette, BIC) and a consensus
-clustering routine. The emphasis is on *stability*: silhouette and BIC guard
+Model-selection helpers (silhouette, BIC) and a consensus clustering routine.
+The emphasis is on *stability*: silhouette and BIC guard
 against choosing too many clusters, while consensus clustering resamples the
 data so that spurious, unstable clusters can be flagged rather than trusted.
 
@@ -15,78 +14,6 @@ as numpy arrays. scikit-learn is imported inside each function body so that
 from __future__ import annotations
 
 import numpy as np
-
-
-def kmeans_cluster(X: np.ndarray, k: int, seed: int | None = None) -> np.ndarray:
-    """Partition samples into ``k`` clusters with k-means.
-
-    Parameters
-    ----------
-    X : np.ndarray, shape (n_samples, n_features)
-        Feature matrix (scikit-learn orientation).
-    k : int
-        Number of clusters.
-    seed : int, optional
-        Seed for reproducible centroid initialization.
-
-    Returns
-    -------
-    np.ndarray, shape (n_samples,)
-        Integer cluster labels in ``[0, k)``.
-    """
-    from sklearn.cluster import KMeans
-
-    x = np.asarray(X, dtype=float)
-    model = KMeans(n_clusters=k, random_state=seed, n_init=10)
-    return np.asarray(model.fit_predict(x))
-
-
-def gmm_cluster(X: np.ndarray, k: int, seed: int | None = None) -> np.ndarray:
-    """Cluster samples with a ``k``-component Gaussian mixture model.
-
-    Parameters
-    ----------
-    X : np.ndarray, shape (n_samples, n_features)
-        Feature matrix (scikit-learn orientation).
-    k : int
-        Number of mixture components (clusters).
-    seed : int, optional
-        Seed for reproducible initialization.
-
-    Returns
-    -------
-    np.ndarray, shape (n_samples,)
-        Integer cluster labels in ``[0, k)`` (hard MAP assignment).
-    """
-    from sklearn.mixture import GaussianMixture
-
-    x = np.asarray(X, dtype=float)
-    model = GaussianMixture(n_components=k, random_state=seed)
-    return np.asarray(model.fit_predict(x))
-
-
-def hierarchical_cluster(X: np.ndarray, k: int, linkage: str = "ward") -> np.ndarray:
-    """Agglomerative (hierarchical) clustering into ``k`` clusters.
-
-    Parameters
-    ----------
-    X : np.ndarray, shape (n_samples, n_features)
-        Feature matrix (scikit-learn orientation).
-    k : int
-        Number of flat clusters to cut the dendrogram into.
-    linkage : str, default "ward"
-        Linkage criterion ("ward", "complete", "average", "single").
-
-    Returns
-    -------
-    np.ndarray, shape (n_samples,)
-        Integer cluster labels in ``[0, k)``.
-    """
-    from sklearn.cluster import AgglomerativeClustering
-
-    x = np.asarray(X, dtype=float)
-    model = AgglomerativeClustering(n_clusters=k, linkage=linkage)
-    return np.asarray(model.fit_predict(x))
 
 
 def select_k_silhouette(

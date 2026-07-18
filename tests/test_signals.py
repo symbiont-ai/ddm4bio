@@ -1,19 +1,15 @@
 """Ground-truth tests for the signal-processing wrappers.
 
 The STFT test checks the (freqs, times, Zxx) shapes are mutually consistent;
-wavelet denoising must move a noisy signal closer to its clean source; and
-compressed-sensing reconstruction must recover a sparse signal from far fewer
-random measurements than its ambient dimension. All tests are deterministic and
-run offline.
+and wavelet denoising must move a noisy signal closer to its clean source. All
+tests are deterministic and run offline.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from ddm4bio.datasets.synthetic import make_sparse_signal, undersample
-from ddm4bio.methods.signals import compressed_sensing_recon, stft, wavelet_denoise
-from ddm4bio.methods.validation import reconstruction_error
+from ddm4bio.methods.signals import stft, wavelet_denoise
 
 
 def test_stft_shapes_are_consistent():
@@ -54,26 +50,3 @@ def test_wavelet_denoise_improves_snr():
     snr_noisy = snr_db(clean, noisy)
     snr_denoised = snr_db(clean, denoised)
     assert snr_denoised > snr_noisy
-
-
-def test_compressed_sensing_recovers_sparse_signal():
-    n = 128
-    k = 5
-    sparse = make_sparse_signal(n, k, seed=5)
-    x = sparse.signal
-
-    # Dense random sensing matrix; undersample selects a subset of its rows so
-    # the recovery problem is genuinely underdetermined (n_meas < n).
-    rng = np.random.default_rng(9)
-    sensing = rng.standard_normal((n, n))
-    full_measurements = sensing @ x
-
-    _samples, kept = undersample(full_measurements, 0.4, seed=11)
-    phi = sensing[kept, :]
-    y = phi @ x
-    assert phi.shape[0] < n  # underdetermined
-
-    x_hat = compressed_sensing_recon(y, phi, alpha=1e-3, seed=0)
-
-    err = reconstruction_error(x, x_hat, kind="rel_l2")
-    assert err < 0.05

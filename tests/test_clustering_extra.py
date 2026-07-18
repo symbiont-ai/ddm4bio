@@ -1,7 +1,7 @@
 """Extra coverage for clustering + reproducibility helpers.
 
 Exercises the currently-uncovered paths: the consensus (co-association) matrix
-and its labels, hierarchical recovery of separated blobs, the full per-k scoring
+and its labels, the full per-k scoring
 loops of ``select_k_silhouette`` / ``select_k_bic``, and the determinism/seeding
 edge cases (non-deterministic callable, RNG restoration after an exception).
 All tests are offline and deterministic (seeded).
@@ -18,7 +18,6 @@ from sklearn.metrics import adjusted_rand_score
 
 from ddm4bio.methods.clustering import (
     consensus_cluster,
-    hierarchical_cluster,
     select_k_bic,
     select_k_silhouette,
 )
@@ -88,24 +87,6 @@ def test_consensus_is_deterministic_under_seed():
     b = consensus_cluster(x, k=3, n_boot=10, seed=7)
     assert np.array_equal(a["consensus_matrix"], b["consensus_matrix"])
     assert np.array_equal(a["labels"], b["labels"])
-
-
-# --------------------------------------------------------------------------- #
-# hierarchical_cluster
-# --------------------------------------------------------------------------- #
-def test_hierarchical_recovers_blobs():
-    x, y_true = _blobs()
-    labels = hierarchical_cluster(x, k=3)
-
-    assert labels.shape == (x.shape[0],)
-    assert np.unique(labels).size == 3
-    assert adjusted_rand_score(y_true, labels) > 0.9
-
-
-def test_hierarchical_average_linkage_recovers_blobs():
-    x, y_true = _blobs()
-    labels = hierarchical_cluster(x, k=3, linkage="average")
-    assert adjusted_rand_score(y_true, labels) > 0.9
 
 
 # --------------------------------------------------------------------------- #
