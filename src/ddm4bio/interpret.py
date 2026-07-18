@@ -1,9 +1,11 @@
 """Honest-interpretation helpers for ddm4bio notebooks.
 
 Every ddm4bio notebook must end its analysis with an explicit *interpretation
-block*: a claim, a stated confidence level backed by evidence, and a named
-list of limitations. These helpers format that block consistently so the
-honesty norm is easy to follow and easy to review.
+block*: a claim, a stated confidence level backed by evidence, and a named list
+of limitations. These helpers format that block as **Markdown** and render it
+with :func:`show_interpretation`, so the claim, evidence, and limitations wrap
+and read as prose -- rather than an over-long, horizontally-scrolling line of
+monospaced ``print`` output that hides the claim off the right edge.
 
 See ``docs/INTERPRETATION.md`` for the convention and ``docs/METHOD_LABELING.md``
 for the surrounding honesty policy.
@@ -16,7 +18,11 @@ _VALID_CONFIDENCE = ("low", "moderate", "high")
 
 
 def confidence_statement(claim: str, confidence: str, evidence: str | None = None) -> str:
-    """Format an honest confidence statement about a single claim.
+    """Format the claim plus its confidence and optional evidence as Markdown.
+
+    Leads with the claim as a sentence, then a separate bold
+    ``**Confidence: <LEVEL>.**`` run, so the confidence *qualifies* the claim
+    instead of being read as the claim itself.
 
     Parameters
     ----------
@@ -29,13 +35,11 @@ def confidence_statement(claim: str, confidence: str, evidence: str | None = Non
     Returns
     -------
     str
-        A formatted block leading with the claim, then a separate
-        ``Confidence: <LEVEL>`` line and (when given) an ``Evidence:`` line, e.g.::
+        Markdown of the form::
 
-            Claim: <claim>
+            **Interpretation.** <claim>
 
-            Confidence: MODERATE
-            Evidence: <evidence>
+            **Confidence: MODERATE.** <evidence>
 
     Raises
     ------
@@ -46,14 +50,16 @@ def confidence_statement(claim: str, confidence: str, evidence: str | None = Non
     if level not in _VALID_CONFIDENCE:
         raise ValueError(f"confidence must be one of {_VALID_CONFIDENCE!r}, got {confidence!r}")
 
-    parts = [f"Claim: {claim.strip()}", "", f"Confidence: {level.upper()}"]
+    parts = [f"**Interpretation.** {claim.strip()}", ""]
+    conf = f"**Confidence: {level.upper()}.**"
     if evidence:
-        parts.append(f"Evidence: {evidence.strip()}")
+        conf += f" {evidence.strip()}"
+    parts.append(conf)
     return "\n".join(parts)
 
 
 def limitations(items: list[str]) -> str:
-    """Format a named-limitations block from a list of strings.
+    """Format a named-limitations block as a Markdown bulleted list.
 
     Parameters
     ----------
@@ -64,14 +70,11 @@ def limitations(items: list[str]) -> str:
     Returns
     -------
     str
-        A formatted block headed ``"Limitations:"`` with one dash-prefixed
-        line per item.
+        Markdown headed ``**Limitations:**`` with one bullet per item.
     """
     cleaned = [item.strip() for item in items if item and item.strip()]
-    if not cleaned:
-        return "Limitations:\n- none stated"
-    lines = "\n".join(f"- {item}" for item in cleaned)
-    return f"Limitations:\n{lines}"
+    body = "\n".join(f"- {item}" for item in cleaned) if cleaned else "- none stated"
+    return f"**Limitations:**\n\n{body}"
 
 
 def interpretation_block(
@@ -80,11 +83,10 @@ def interpretation_block(
     limitations_list: list[str],
     evidence: str | None = None,
 ) -> str:
-    """Build the standard interpretation block for a notebook.
+    """Build the standard interpretation block for a notebook, as Markdown.
 
-    Combines :func:`confidence_statement` and :func:`limitations` into the
-    single block every ddm4bio notebook must include in its Interpretation
-    section.
+    Combines :func:`confidence_statement` and :func:`limitations`. Render it with
+    :func:`show_interpretation` (not ``print``) so it wraps as prose.
 
     Parameters
     ----------
@@ -96,8 +98,7 @@ def interpretation_block(
     Returns
     -------
     str
-        The confidence statement followed by a blank line and the named
-        limitations block.
+        Markdown: the confidence statement, a blank line, then the limitations.
 
     Raises
     ------
@@ -107,3 +108,16 @@ def interpretation_block(
     header = confidence_statement(claim, confidence, evidence)
     body = limitations(limitations_list)
     return f"{header}\n\n{body}"
+
+
+def show_interpretation(block: str) -> None:
+    """Render a Markdown interpretation block in a notebook.
+
+    ``block`` is the Markdown string returned by :func:`interpretation_block`.
+    Rendering it as Markdown -- rather than ``print``-ing it -- lets the claim,
+    evidence, and each limitation wrap to the page width, instead of overflowing
+    a single monospaced line that scrolls the claim out of view.
+    """
+    from IPython.display import Markdown, display
+
+    display(Markdown(block))
