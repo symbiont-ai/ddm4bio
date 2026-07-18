@@ -50,7 +50,9 @@ Implement:
 
 An image that does not belong to the normal subspace reconstructs badly, so its
 **reconstruction error is a novelty score**. Use it to flag corrupted acquisitions
-(poor focus, saturation, sensor noise) before they contaminate an analysis.
+(sensor noise, saturation/clipping, debris) before they contaminate an analysis.
+(Defocus blur is the instructive *failure* case: it is low-pass, so a blurred cell moves
+*toward* the smooth subspace and reconstruction error under-detects it.)
 
 Implement:
 

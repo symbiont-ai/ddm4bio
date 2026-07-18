@@ -29,8 +29,13 @@ def confidence_statement(claim: str, confidence: str, evidence: str | None = Non
     Returns
     -------
     str
-        A formatted statement of the form
-        ``"Confidence: MODERATE -- <claim> (evidence: <evidence>)"``.
+        A formatted block leading with the claim, then a separate
+        ``Confidence: <LEVEL>`` line and (when given) an ``Evidence:`` line, e.g.::
+
+            Claim: <claim>
+
+            Confidence: MODERATE
+            Evidence: <evidence>
 
     Raises
     ------
@@ -41,10 +46,10 @@ def confidence_statement(claim: str, confidence: str, evidence: str | None = Non
     if level not in _VALID_CONFIDENCE:
         raise ValueError(f"confidence must be one of {_VALID_CONFIDENCE!r}, got {confidence!r}")
 
-    statement = f"Confidence: {level.upper()} -- {claim.strip()}"
+    parts = [f"Claim: {claim.strip()}", "", f"Confidence: {level.upper()}"]
     if evidence:
-        statement += f" (evidence: {evidence.strip()})"
-    return statement
+        parts.append(f"Evidence: {evidence.strip()}")
+    return "\n".join(parts)
 
 
 def limitations(items: list[str]) -> str:

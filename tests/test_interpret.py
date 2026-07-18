@@ -24,6 +24,9 @@ def test_confidence_statement_contains_content():
     assert claim in text
     assert evidence in text
     assert "MODERATE" in text
+    # the claim must LEAD -- confidence is a separate labelled line, not a prefix on the claim
+    assert text.startswith("Claim:")
+    assert text.index(claim) < text.index("Confidence:")
 
 
 def test_confidence_statement_accepts_all_valid_levels():
