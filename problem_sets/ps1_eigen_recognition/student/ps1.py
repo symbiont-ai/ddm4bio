@@ -25,6 +25,7 @@ unimplemented function.
 from __future__ import annotations
 
 import numpy as np
+
 from ddm4bio.config import GLOBAL_SEED, seed_everything
 from ddm4bio.interpret import interpretation_block
 from ddm4bio.qc.report import assert_no_leakage
@@ -42,8 +43,9 @@ def load_blood_cells(
     Returns ``(X_train, X_test, source, provenance)``. ``X_train`` is the library
     of *clean, normal* cells we model; ``X_test`` is held out.
     """
-    from ddm4bio.datasets import get_dataset
     from sklearn.model_selection import train_test_split
+
+    from ddm4bio.datasets import get_dataset
 
     ds = get_dataset("bloodmnist", seed=seed)
     images = ds.payload["train_images"]  # (N, H, W, C) uint8
