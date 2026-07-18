@@ -63,7 +63,7 @@ The provided `run_qc` reports the signal length, its nonzero count, and how many
 the candidate measurement counts are genuinely undersampled (`m < n`) — printed
 before any result. The provided `main` closes with a
 `ddm4bio.interpret.interpretation_block`: state how sharply the cliff and phase
-transition support the claim, at an honest confidence level, and name the real
+transition support the claim, and name the real
 limitations — signals are *exactly* k-sparse in the canonical basis (real signals are
 only approximately sparse in a wavelet/Fourier basis, which softens the cliff), the
 transition is mapped at one tolerance and one measurement grid, and the L1 solver

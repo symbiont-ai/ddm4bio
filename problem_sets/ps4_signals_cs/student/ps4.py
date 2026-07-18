@@ -193,7 +193,6 @@ def main() -> None:
             f"that limit grows with sparsity (from {m_star_curve[0]} to {m_star_curve[-1]} "
             f"measurements as k goes {sparsities[0]} to {sparsities[-1]})."
         ),
-        confidence="high",
         limitations_list=[
             "Signals are exactly k-sparse in the canonical basis; real signals are only "
             "approximately sparse (in a wavelet/Fourier basis), which softens the cliff.",
@@ -202,10 +201,6 @@ def main() -> None:
             "The L1 solver uses a fixed regularization, so recovery above the cliff is good but "
             "not machine-exact.",
         ],
-        evidence=(
-            "a sharp error-vs-measurements cliff, a monotone minimum-measurements-vs-sparsity "
-            "curve, and a real ECG shown to be compressible"
-        ),
     )
     print(block)
 

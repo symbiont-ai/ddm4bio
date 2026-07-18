@@ -234,17 +234,12 @@ def main() -> None:
             f"and reconstruction error separates corrupted acquisitions from clean ones "
             f"at AUC {auc:.2f}."
         ),
-        confidence="high",
         limitations_list=[
             "Noise is synthetic additive Gaussian; real acquisition artifacts (blur, "
             "saturation, debris) are not identically distributed.",
             "SNR gain and detection AUC are single held-out estimates, not cross-validated.",
             "The subspace is linear; genuinely nonlinear novelties may still project onto it.",
         ],
-        evidence=(
-            "single-peaked SNR-vs-rank curve, leakage-checked split, corrupted-vs-clean "
-            "separation measured by ROC-AUC with a false-alarm-bounded threshold"
-        ),
     )
     print(block)
 

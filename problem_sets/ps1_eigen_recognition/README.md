@@ -70,7 +70,7 @@ The provided `run_qc` prints a **leakage-checked** block (the normal-cell librar
 and the held-out set are disjoint) and a full-rank reconstruction sanity check
 *before* any results. The provided `main` closes with a
 `ddm4bio.interpret.interpretation_block`: state how much the denoising and
-detection results support the claim, pick an honest confidence level, and name the
+detection results support the claim, and name the
 real limitations — the noise is synthetic additive Gaussian, the SNR gain and AUC
 are single held-out estimates, and the subspace is linear.
 

@@ -65,7 +65,7 @@ Validate on synthetic matrices of known planted rank. Implement:
 The provided `run_qc` reports the matrix shape, top-3 variance explained, and aspect
 ratio γ = p/n — printed before any rank result. The provided `main` closes with a
 `ddm4bio.interpret.interpretation_block`: state how strongly the synthetic recovery and
-the PBMC3k contiguous block support the claim, at an honest confidence level, and name
+the PBMC3k contiguous block support the claim, and name
 the real limitations — the permutation test's per-rank false-positive rate, the MP
 edge's Gaussian assumption, and that a real "true rank" is not a single objective
 integer (it shifts with gene selection).

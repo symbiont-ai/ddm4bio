@@ -309,7 +309,6 @@ def main() -> None:
             f"over-counts ({cmp_real['mp_edge_k']} PCs) because real expression noise "
             f"is not Gaussian."
         ),
-        confidence="high",
         limitations_list=[
             "The permutation null has a per-rank false-positive rate equal to (100 - "
             "percentile)%, so on pure noise it can occasionally admit one spurious component.",
@@ -318,11 +317,6 @@ def main() -> None:
             "The real 'true rank' is not a single objective integer; the PBMC3k count is a "
             "defensible cutoff, not a universal constant, and shifts with gene selection.",
         ],
-        evidence=(
-            "exact planted-rank recovery across a synthetic noise sweep, a contiguous block of "
-            "significant PCs with a smooth significance-ratio decay through 1, and a documented "
-            "MP-edge over-count on the same real matrix"
-        ),
     )
     print(block)
 

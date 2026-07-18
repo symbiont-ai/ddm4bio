@@ -41,7 +41,7 @@ expected numbers or disables a check earns no credit for the affected part.
 
 ## Interpretation & honesty — 5 points
 
-- A clear `interpretation_block` with a confidence level backed by the evidence
+- A clear `interpretation_block` -- a claim stated with the evidence
   actually generated (a sharp error-vs-measurements cliff, a monotone
   minimum-measurements-vs-sparsity curve, a real ECG shown to be compressible), plus
   at least two honest, specific limitations — exact vs. approximate sparsity, a

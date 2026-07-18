@@ -44,7 +44,7 @@ expected numbers or disables a check earns no credit for the affected part.
 
 ## Interpretation & honesty — 5 points
 
-- A clear `interpretation_block` with a confidence level backed by the evidence
+- A clear `interpretation_block` -- a claim stated with the evidence
   actually generated (exact synthetic recovery across the noise sweep, a contiguous
   block of significant PCs with a smooth ratio decay through 1, and the documented
   MP-edge over-count on real data), plus at least two honest limitations — the per-rank

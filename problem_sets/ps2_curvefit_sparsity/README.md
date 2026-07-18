@@ -64,7 +64,7 @@ On the synthetic data you measure recovery; on real WDBC you read off a panel
 The provided `run_qc` verifies the folds are **disjoint and complete** (each row is
 held out exactly once, so every CV score is out-of-sample), printed before any
 result. The provided `main` closes with a `ddm4bio.interpret.interpretation_block`:
-state how much cross-validation supports the claim, at an honest confidence level,
+state how much cross-validation supports the claim,
 and name the real limitations — CV-tuned Lasso recovers the true drivers but
 **over-selects** (high recall, lower precision), each CV score is a single held-out
 estimate, and the real panel has no ground truth to score against.

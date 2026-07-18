@@ -39,7 +39,7 @@ credit for the affected part.
 
 ## Interpretation & honesty — 10 points
 
-- A clear `interpretation_block` with a confidence level backed by the evidence
+- A clear `interpretation_block` -- a claim stated with the evidence
   actually generated (the U-shaped CV curves, disjoint-and-complete folds,
   precision/recall vs a known support).
 - At least two honest, specific limitations — especially that CV-tuned Lasso

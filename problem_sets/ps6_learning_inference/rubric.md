@@ -47,7 +47,7 @@ expected numbers or disables a check earns no credit for the affected part.
 
 ## Interpretation & honesty — 10 points
 
-- A clear `interpretation_block` with a confidence level backed by the evidence actually
+- A clear `interpretation_block` -- a claim stated with the evidence actually
   generated (the naive/split/thin Type-I separation, the retained-power sweep, the real
   over-call), plus at least two honest limitations — that thinning assumes Gaussian noise
   with an estimated variance, that real single-cell counts double-dip only mildly, and

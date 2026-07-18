@@ -57,7 +57,7 @@ epidemic turning points. The ECG is an honest null (a linear model has no skill)
 The provided `run_qc` reports the data source, length, and range before any result. The
 provided `main` closes with a `ddm4bio.interpret.interpretation_block`: distinguish
 **intrinsic** predictability (the Lyapunov limit) from **model-limited** predictability (a
-particular forecaster's skill), at an honest confidence level, and name the real
+particular forecaster's skill), and name the real
 limitations — the finite-time estimator's alignment-transient bias, the Gaussian/linearity
 assumptions, and COVID non-stationarity.
 

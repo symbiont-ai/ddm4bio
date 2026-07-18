@@ -359,7 +359,6 @@ def main() -> None:
             "and test sets independent by construction, restores the nominal error rate while "
             "retaining power on real signal."
         ),
-        confidence="high",
         limitations_list=[
             "Type-I control is demonstrated on Gaussian synthetic nulls; on real single-cell data "
             "the sparse, heavy-tailed gene marginals suppress the trap, so the real counts are "
@@ -369,11 +368,6 @@ def main() -> None:
             "The synthetic power check uses a planted informative-feature mask; real effect sizes "
             "and dependence structure are richer.",
         ],
-        evidence=(
-            "a known-null Type-I sweep separating naive, sample-split, and data-thin "
-            "false-discovery rates, a power sweep showing the valid methods keep real signal, "
-            "and a real-PBMC3k over-call quantified against the two agreeing valid protocols"
-        ),
     )
     print(block)
 

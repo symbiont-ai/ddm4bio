@@ -356,7 +356,6 @@ def main() -> None:
             f"while non-chaotic systems (lambda<=0) are predictable indefinitely; a real forecast "
             f"adds a further model-limited horizon (~{med} days on COVID incidence)."
         ),
-        confidence="high",
         limitations_list=[
             "The finite-time Lyapunov estimate has an alignment-transient bias, so the fit window "
             "matters; lambda is reported within a tolerance band, not to many digits.",
@@ -365,12 +364,6 @@ def main() -> None:
             "The linear Hankel-DMD model has essentially no skill on the ECG, and COVID incidence "
             "is non-stationary, so the empirical horizon collapses exactly when a wave turns.",
         ],
-        evidence=(
-            "a Lorenz Lyapunov exponent recovered within a tolerance band of the known value "
-            "(the finite-time estimator is biased low by the alignment transient), a clean "
-            "finite-vs-unbounded horizon contrast across chaotic and non-chaotic systems, and a "
-            "finite model-limited horizon measured on real COVID incidence"
-        ),
     )
     print(block)
 

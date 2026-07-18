@@ -38,7 +38,7 @@ credit for the affected part.
 
 ## Interpretation & honesty — 15 points
 
-- A clear `interpretation_block` with an explicit confidence level backed by the
+- A clear `interpretation_block` -- a claim stated with the
   evidence actually generated (the single-peaked SNR curve, the leakage-checked
   split, the AUC with a false-alarm-bounded threshold).
 - At least two honest, specific limitations — e.g. that the noise is synthetic

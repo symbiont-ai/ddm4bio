@@ -44,8 +44,7 @@ cannot earn credit.
 
 - QC (data source, length, range) is printed before results; the `interpretation_block`
   distinguishes **intrinsic** predictability (the system's Lyapunov limit) from
-  **model-limited** predictability (a particular forecaster's skill), at an honest
-  confidence level, and names the real limitations — the finite-time estimator's
+  **model-limited** predictability (a particular forecaster's skill), and names the real limitations — the finite-time estimator's
   alignment-transient bias, the Gaussian/linearity assumptions, and COVID non-stationarity.
   Overclaiming a single "the forecast horizon" without a model or regime is penalized.
 

@@ -223,7 +223,6 @@ def main() -> None:
             f"without ever seeing the ground truth, and yields a {len(panel)}-marker panel on "
             f"real breast-cytology data."
         ),
-        confidence="high",
         limitations_list=[
             "CV-tuned Lasso recovers the real drivers but over-selects (precision "
             f"{scores['precision']:.2f}) -- held-out error favors keeping a few spurious features.",
@@ -231,10 +230,6 @@ def main() -> None:
             "The real panel has no ground-truth driver set, so it is read qualitatively, "
             "not scored for recovery.",
         ],
-        evidence=(
-            "U-shaped CV-MSE curves over degree and over penalty, disjoint-and-complete "
-            "folds, precision/recall against a known synthetic support"
-        ),
     )
     print(block)
 

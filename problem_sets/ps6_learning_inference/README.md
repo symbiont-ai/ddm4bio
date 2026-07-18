@@ -61,8 +61,7 @@ signal.
 ## Quality control & interpretation (required)
 
 Type-I inflation is graded on the synthetic null (true count 0), *not* the real data.
-The provided `main` closes with a `ddm4bio.interpret.interpretation_block`: state the
-confidence (the synthetic Type-I sweep is the calibrated evidence; real data is
+The provided `main` closes with a `ddm4bio.interpret.interpretation_block`: state the claim (the synthetic Type-I sweep is the evidence; real data is
 illustrative) and the honest limitations — data-thinning assumes Gaussian noise with an
 estimated variance, real single-cell counts double-dip only mildly, and FDR corrects
 multiplicity, not selection.

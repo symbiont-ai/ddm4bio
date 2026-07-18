@@ -205,7 +205,6 @@ def main() -> None:
             f"positive predictive value falls from {ppvs[0]:.2f} in a high-prevalence clinic "
             f"to {ppvs[-1]:.2f} at screening prevalence -- the same test, a very different tool."
         ),
-        confidence="high",
         limitations_list=[
             "Sensitivity and specificity are single held-out estimates (n small); a "
             "different split shifts the chosen threshold.",
@@ -214,10 +213,6 @@ def main() -> None:
             "PPV/NPV assume the held-out sensitivity/specificity transfer unchanged to the "
             "new-prevalence population, which distribution shift can violate.",
         ],
-        evidence=(
-            "threshold-swept sensitivity/specificity on real data, a cost-minimizing "
-            "operating point, and Bayes' PPV/NPV across prevalences"
-        ),
     )
     print(block)
 

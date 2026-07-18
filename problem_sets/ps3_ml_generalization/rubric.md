@@ -40,7 +40,7 @@ expected numbers or disables a check earns no credit for the affected part.
 
 ## Interpretation & honesty — 10 points
 
-- A clear `interpretation_block` with a confidence level backed by the evidence
+- A clear `interpretation_block` -- a claim stated with the evidence
   actually generated (threshold-swept sensitivity/specificity, a cost-minimizing
   operating point, Bayes' PPV/NPV across prevalences).
 - At least two honest, specific limitations — small-sample sensitivity/specificity,

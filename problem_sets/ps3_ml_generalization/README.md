@@ -57,7 +57,7 @@ is — but its **predictive value** does. Implement:
 The provided `run_qc` reports the held-out prevalence and the ranking AUC, and notes
 that AUC says nothing about the cutoff — printed before any result. The provided
 `main` closes with a `ddm4bio.interpret.interpretation_block`: state how much the
-operating-point analysis supports the claim, at an honest confidence level, and name
+operating-point analysis supports the claim, and name
 the real limitations — sensitivity/specificity are small-sample estimates, the cost
 ratio is stipulated, and PPV/NPV assume the operating characteristics transfer to the
 new-prevalence population (distribution shift can violate this).
