@@ -87,9 +87,10 @@ Kutz's textbook lives largely in its data-methods chapters. We spend our time on
 - **Dynamics learned from data** — dynamic mode decomposition (DMD), Koopman-operator
   ideas, sparse identification of nonlinear dynamics (SINDy), and data assimilation /
   Kalman filtering.
-- **Deep learning** — linear and nonlinear autoencoders and sensing-and-reconstruction
-  (SHRED) architectures in Week 8; reinforcement learning and transformer /
-  foundation-model embeddings in the capstone.
+- **Deep learning** — linear and nonlinear autoencoders, a convolutional classifier, and
+  sensing-and-reconstruction (SHRED) architectures in Week 8, with a reinforcement-learning
+  dosing preview; reinforcement learning is developed in the capstone. Transformers and
+  foundation-model embeddings sit beyond this course's scope.
 
 ## What the course de-emphasizes
 
@@ -117,7 +118,8 @@ By the end of the course, you should be able to:
    especially in the small-sample regime typical of clinical data.
 6. **Discover dynamics from measurements** using DMD, SINDy, and data-assimilation /
    filtering methods, and use them to forecast and to filter noisy time series.
-7. **Apply modern deep learning** — train autoencoders (linear and nonlinear) and
-   sensing-and-reconstruction (SHRED) models for representation learning and field
-   reconstruction, and extend to reinforcement learning and transformer / foundation-model
-   embeddings in the capstone — with an eye to when the added complexity is warranted.
+7. **Apply modern deep learning** — train autoencoders (linear and nonlinear), a
+   convolutional classifier, and sensing-and-reconstruction (SHRED) models, and learn a
+   control policy by reinforcement learning (previewed in Week 8, developed in the
+   capstone) — with an eye to when the added complexity is warranted. Transformers and
+   foundation-model embeddings sit beyond this course's scope.
