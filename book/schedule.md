@@ -1,7 +1,8 @@
 # Schedule
 
-The eight weeks below pair the methods you will learn with the biomedical application
-that motivates them and the dataset it runs on. Each row is a self-contained arc: the
+The eight weeks below — and the capstone that follows them — pair the methods you will
+learn with the biomedical application that motivates them and the dataset it runs on. Each
+row is a self-contained arc: the
 lesson introduces the mathematics, and its one-click Colab lab exercises it on the
 listed data. Where a method needs a known answer to be scored, the lab pairs a real
 dataset with a **synthetic ground-truth fixture** — see
@@ -16,7 +17,8 @@ dataset with a **synthetic ground-truth fixture** — see
 | **W5** | Dimensionality reduction: the SVD, PCA, robust PCA, ICA, linear discriminant analysis (LDA), and nonlinear neighbor embeddings (t-SNE, UMAP). | Finding the low-dimensional structure in single-cell expression data, and separating statistically independent mixed sources. | **10x PBMC3k** single-cell · **BloodMNIST** · synthetic ICA sources |
 | **W6** | Learning from data — unsupervised and supervised: clustering, classifiers, and correction for multiple testing / false-discovery rate. | Discovering cell types and disease subtypes, and building diagnostic classifiers. | **10x PBMC3k** single-cell · **Wisconsin (WDBC)** |
 | **W7** | Dynamics from data: dynamic mode decomposition (DMD), SINDy, and Kalman-filter data assimilation. | Modeling epidemic and physiological dynamics, and filtering noisy vital-sign streams. | **JHU COVID-19** case series · **MIT-BIH ECG** · synthetic dynamical systems |
-| **W8** | Deep learning for representations and dynamics: linear and nonlinear autoencoders (a linear autoencoder is exactly PCA), a convolutional net on blood-cell images, and shallow sensing-and-reconstruction (SHRED) architectures. Reinforcement learning is a different paradigm (learning to act) and is previewed and developed in the capstone; transformers and foundation-model embeddings are beyond this course's scope. | Learning a nonlinear latent that follows a curved manifold, and reconstructing a full spatiotemporal field from a handful of sensors. | Synthetic manifold & field fixtures · Wisconsin (WDBC) · **BloodMNIST** blood-cell images |
+| **W8** | Deep learning for representations and dynamics: linear and nonlinear autoencoders (a linear autoencoder is exactly PCA), a convolutional net on blood-cell images, and shallow sensing-and-reconstruction (SHRED) architectures. | Learning a nonlinear latent that follows a curved manifold, and reconstructing a full spatiotemporal field from a handful of sensors. | Synthetic manifold & field fixtures · Wisconsin (WDBC) · **BloodMNIST** blood-cell images |
+| **Capstone** | Model-informed reinforcement learning for precision dosing: fit a mechanistic one-compartment PK model and an indirect-response PD model (model-driven), characterize inter-patient variability (data-driven), calibrate a dosing environment, and learn a dosing policy with value iteration and Q-learning. | Designing a personalized **warfarin** dosing policy — the course's model-driven ↔ data-driven hybrid in one project. | **Warfarin PK/PD** (nlmixr2data) · synthetic PK/PD fixture |
 
 ```{note}
 Where a lesson cites a chapter number, that number refers to J. N. Kutz's textbook
@@ -24,3 +26,7 @@ Where a lesson cites a chapter number, that number refers to J. N. Kutz's textbo
 for a deeper treatment. This course explains every concept in its own words and does not
 reproduce that text.
 ```
+
+The capstone is detailed in its own [brief](capstone.md), with a runnable
+[reinforcement-learning preview](capstone_rl_preview.ipynb) of the value-iteration →
+Q-learning dosing method.
