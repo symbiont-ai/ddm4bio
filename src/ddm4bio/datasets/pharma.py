@@ -249,7 +249,7 @@ _CCLE_UPSTREAM = (
 )
 _CCLE_MIRROR = f"{_MIRROR_BASE}/ccle_drug_data.csv"
 _CCLE_LICENSE = (
-    "CC BY 4.0 (CCLE / Broad DepMap; DOI-pinned at Zenodo 10.5281/zenodo.3905462); "
+    "CC BY 4.0 (CCLE pharmacological profiling; Broad/DepMap terms); "
     "data from Barretina et al. (2012), Nature 483:603-607"
 )
 # Tidy long schema: one row per concentration, carrying CCLE's own fitted summary

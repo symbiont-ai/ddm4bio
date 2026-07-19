@@ -320,7 +320,7 @@ DATASET_REGISTRY: dict[str, DatasetSpec] = {
         name="CCLE pharmacological profiling (dose-response)",
         modality="tabular",
         tier="open",
-        license="CC BY 4.0 (Broad/DepMap; Zenodo 10.5281/zenodo.3905462)",
+        license="CC BY 4.0 (CCLE pharmacological profiling; Broad/DepMap terms)",
         citation=(
             "Barretina et al. (2012), The Cancer Cell Line Encyclopedia enables "
             "predictive modelling of anticancer drug sensitivity, Nature "
