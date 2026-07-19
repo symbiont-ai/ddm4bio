@@ -19,8 +19,8 @@ parts:
       - file: lessons/wk8_deep_learning
   - caption: Capstone
     chapters:
-      - file: capstone
       - file: capstone_rl_preview
+      - file: capstone
   - caption: Reference
     chapters:
       - file: references
