@@ -8,8 +8,7 @@ schedule. Each week has two components:
 
 - **A lesson** that develops the ideas and the mathematics in plain language, with fully
   worked code. Read it on the page, or open the same notebook in Google Colab with one
-  click to run and modify it yourself in the browser (with a free GPU for the
-  deep-learning week).
+  click to run and modify it yourself in the browser.
 - **A problem set** that puts the method to work on a *new* problem the lesson does not
   solve for you: the reusable pieces are provided, and you implement the missing logic
   yourself. It is distributed and graded automatically through GitHub Classroom.
@@ -68,7 +67,8 @@ You will work entirely in the modern scientific-Python ecosystem:
 - **NumPy** and **SciPy** for numerical arrays, linear algebra, and signal processing.
 - **scikit-learn** for classical machine learning.
 - **PyTorch** for neural networks and deep learning — the Week-8 lesson trains small
-  models device-agnostically (a free Colab GPU when one is available, otherwise CPU).
+  models device-agnostically (on a GPU when one is available, otherwise CPU) and is
+  designed to run on CPU.
 - **Jupyter** notebooks as the interactive computing environment (run in Google Colab).
 - **GitHub** for version control, reproducibility, and sharing your work.
 
@@ -89,9 +89,9 @@ Kutz's textbook lives largely in its data-methods chapters. We spend our time on
   identification of nonlinear dynamics (SINDy), and data assimilation /
   Kalman filtering.
 - **Deep learning** — linear and nonlinear autoencoders, a convolutional classifier, and
-  sensing-and-reconstruction (SHRED) architectures in Week 8, with a reinforcement-learning
-  dosing preview; reinforcement learning is developed in the capstone. Transformers and
-  foundation-model embeddings sit beyond this course's scope.
+  sensing-and-reconstruction (SHRED) architectures in Week 8. Reinforcement learning — a
+  distinct paradigm (learning to act) — is previewed and developed in the capstone.
+  Transformers and foundation-model embeddings sit beyond this course's scope.
 
 ## What the course de-emphasizes
 
@@ -123,6 +123,6 @@ By the end of the course, you should be able to:
    filtering methods, and use them to forecast and to filter noisy time series.
 7. **Apply modern deep learning** — train autoencoders (linear and nonlinear), a
    convolutional classifier, and sensing-and-reconstruction (SHRED) models, and learn a
-   control policy by reinforcement learning (previewed in Week 8, developed in the
+   control policy by reinforcement learning (previewed and developed in the
    capstone) — with an eye to when the added complexity is warranted. Transformers and
    foundation-model embeddings sit beyond this course's scope.

@@ -20,6 +20,7 @@ parts:
   - caption: Capstone
     chapters:
       - file: capstone
+      - file: capstone_rl_preview
   - caption: Reference
     chapters:
       - file: references

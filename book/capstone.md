@@ -9,8 +9,8 @@ graded is depth and rigor, not novelty of topic.
 You **fit** a mechanistic PK/PD model to real data (model-driven), **calibrate** a
 dosing environment from the fitted patient-to-patient variability, and **learn** a
 dosing policy by reinforcement learning (data-driven) — the value-iteration →
-Q-learning loop previewed in [Week 8](lessons/wk8_deep_learning.ipynb), now grounded
-in a real drug. The mechanistic fit *is* what calibrates the environment the
+Q-learning loop from the runnable [reinforcement-learning preview](capstone_rl_preview.ipynb),
+now grounded in a real drug. The mechanistic fit *is* what calibrates the environment the
 policy is optimized on: that is the course's "combine the two paradigms" made
 concrete.
 

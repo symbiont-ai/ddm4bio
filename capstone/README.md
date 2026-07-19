@@ -51,7 +51,7 @@ learning outcome, made concrete.
 | 3. Fit PD | A (model) | Characterize the anticoagulation effect and its link to exposure (a turnover / indirect-response model, or an exposure→effect fit); this defines the therapeutic *effect* target | ODE / optimization (wk2, wk7) |
 | 4. Characterize variability | B (data) | Reduce and cluster the per-patient PK/PD parameters; relate the spread to covariates (does weight explain clearance?) | `pca_reduce`, clustering, `select_k_silhouette`, `bh_fdr` (wk5–6) |
 | 5. Calibrate the environment | — | Build a dosing environment whose clearance is drawn from the **fitted** patient-to-patient spread | `PKDosingEnv` |
-| 6. Learn the policy | B (data) | Recover the optimal dosing policy: value iteration (model-based ground truth) + Q-learning (model-free) | `value_iteration`, `q_learning` (wk8 §6) |
+| 6. Learn the policy | B (data) | Recover the optimal dosing policy: value iteration (model-based ground truth) + Q-learning (model-free) | `value_iteration`, `q_learning` (RL preview) |
 | 7. Validate + interpret | — | Show the fit recovers known pharmacology, the learner reaches the optimum, and the policy holds the effect in-window **better than a fixed dose**; close with an interpretation block | `policy_value`, `interpretation_block` |
 
 The two methods are *connected by construction*: the Group-A fit **is** what
