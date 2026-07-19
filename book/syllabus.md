@@ -36,13 +36,6 @@ A prior **machine-learning course is recommended, not required.** With one, Week
 and the deep-learning week (8) go smoothly; without one, those are the steep parts —
 reachable, just steeper. Everything else assumes only the bar above.
 
-**Who it's for.** Quantitatively-trained people — CS, math, physics, and engineering
-students, working data scientists, and computationally-inclined biologists and clinicians
-who already have linear algebra, statistics, and Python. It also works as a **refresher
-for practising ML scientists and engineers moving into life-sciences and biomedical
-work**: you get the biomedical framing, the datasets, and the domain-specific pitfalls —
-base-rate traps, double-dipping, real-data QC — mapped onto methods you may already know.
-
 **Rusty? Brush up on** the SVD and eigendecomposition (what singular values mean and how
 to read them), hypothesis testing and null / permutation distributions, and NumPy array
 indexing and linear-algebra calls. Those carry the most weight early on.

@@ -43,15 +43,12 @@ is learning from data.
 
 ## Who it is for
 
-The course is aimed at students and working scientists who want to compute, not just
-read about computing. You will get the most out of it if you bring:
-
-- **Linear algebra** — comfort with vectors, matrices, and the idea of an eigenvalue.
-- **Calculus** — derivatives, gradients, and integrals at the level of a standard
-  introductory sequence.
-- **Introductory statistics** — distributions, means and variances, and the basic
-  logic of estimation and hypothesis testing.
-- **Working Python** — you can write a loop, define a function, and install a package.
+Quantitatively-trained people — CS, math, physics, and engineering students, working data
+scientists, and computationally-inclined biologists and clinicians who already have linear
+algebra, statistics, and Python. It also works as a **refresher for practising ML
+scientists and engineers moving into life-sciences and biomedical work**: you get the
+biomedical framing, the datasets, and the domain-specific pitfalls — base-rate traps,
+double-dipping, real-data QC — mapped onto methods you may already know.
 
 No biology background is required. Every biomedical example is introduced from scratch,
 in plain language, with just enough domain context to make the modeling choices sensible.
