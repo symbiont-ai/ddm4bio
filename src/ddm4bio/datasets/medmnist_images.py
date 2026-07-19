@@ -39,6 +39,25 @@ _NPZ_KEYS = (
     "test_labels",
 )
 
+#: Class index -> cell type for BloodMNIST, from the authoritative MedMNIST v2 spec
+#: (MedMNIST ``info.py``; Yang et al., Scientific Data 2023, repackaging Acevedo et al.,
+#: 2020). The ``.npz`` carries only integer labels, so these names are recorded here and
+#: attached to the real dataset as :attr:`LoadedDataset.labels`. Index 3's full name is
+#: "immature granulocytes (myelocytes, metamyelocytes and promyelocytes)", abbreviated here.
+BLOODMNIST_LABELS: tuple[str, ...] = (
+    "basophil",
+    "eosinophil",
+    "erythroblast",
+    "immature granulocyte",
+    "lymphocyte",
+    "monocyte",
+    "neutrophil",
+    "platelet",
+)
+
+#: Per-subset class names for the MedMNIST collections used in this course.
+_MEDMNIST_LABELS: dict[str, tuple[str, ...]] = {"bloodmnist": BLOODMNIST_LABELS}
+
 
 def _download(url: str, dest, *, timeout: float = 60.0) -> None:
     """Fetch ``url`` to ``dest`` atomically (write to a temp then rename)."""
@@ -182,7 +201,13 @@ def load_medmnist(
             f"real MedMNIST v2 {name!r} from {origin_desc[origin]}; CC BY 4.0; "
             "per-split 2D image arrays (N,H,W,C) uint8 with integer class labels."
         )
-        return LoadedDataset(payload=payload, source="real", provenance=provenance, key=name)
+        return LoadedDataset(
+            payload=payload,
+            source="real",
+            provenance=provenance,
+            key=name,
+            labels=_MEDMNIST_LABELS.get(name),
+        )
     except Exception as exc:  # noqa: BLE001 - fall back on any real-fetch failure
         return _fallback(
             name=name,

@@ -104,12 +104,18 @@ class LoadedDataset:
         Free-text description of where the payload came from and why.
     key:
         The registry key this dataset was loaded under.
+    labels:
+        For a classification dataset, the class-index-to-name tuple (entry ``i``
+        names class ``i``); ``None`` when the payload carries no named classes
+        (e.g. a synthetic fallback). Lets callers read authoritative class names
+        from the loader instead of hard-coding them.
     """
 
     payload: Any
     source: str
     provenance: str
     key: str
+    labels: tuple[str, ...] | None = None
 
 
 DATASET_REGISTRY: dict[str, DatasetSpec] = {

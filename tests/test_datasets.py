@@ -23,6 +23,7 @@ import numpy as np
 import pytest
 
 from ddm4bio.datasets import (
+    BLOODMNIST_LABELS,
     DATASET_REGISTRY,
     LoadedDataset,
     get_dataset,
@@ -31,6 +32,25 @@ from ddm4bio.datasets import (
 
 _ALL_KEYS = sorted(DATASET_REGISTRY)
 _TIERS = {"open", "archive", "credentialed"}
+
+
+def test_bloodmnist_labels_are_authoritative_and_fallback_carries_none():
+    """The 8 BloodMNIST class names live in the loader; the synthetic fallback has none."""
+    assert BLOODMNIST_LABELS == (
+        "basophil",
+        "eosinophil",
+        "erythroblast",
+        "immature granulocyte",
+        "lymphocyte",
+        "monocyte",
+        "neutrophil",
+        "platelet",
+    )
+    # The offline fallback is synthetic digits, not the labelled cell dataset, so it
+    # exposes no cell-type names (callers must gate on ``labels is not None``).
+    fallback = get_dataset("bloodmnist", download=False, prefer_real=False)
+    assert fallback.source == "fallback"
+    assert fallback.labels is None
 
 
 @pytest.mark.parametrize("key", _ALL_KEYS)

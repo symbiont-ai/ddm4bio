@@ -7,6 +7,7 @@ here, to avoid import-order fragility and heavy top-level imports). The package
 imports cleanly on numpy alone -- ``importlib`` and ``dataclasses`` are stdlib.
 """
 
+from .medmnist_images import BLOODMNIST_LABELS
 from .registry import (
     DATASET_REGISTRY,
     DatasetSpec,
@@ -16,6 +17,7 @@ from .registry import (
 )
 
 __all__ = [
+    "BLOODMNIST_LABELS",
     "DATASET_REGISTRY",
     "DatasetSpec",
     "LoadedDataset",
