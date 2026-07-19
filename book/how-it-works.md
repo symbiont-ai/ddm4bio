@@ -8,7 +8,7 @@ Here's what a typical week looks like and how everything fits together.
 
 Each week begins with a lesson. Read it first — it introduces the ideas in plain language, motivates why the method matters for real biological data, and sets up the reasoning you'll need before you touch any code. Skimming works less well here than in most places, because running the code yourself assumes you've absorbed the conceptual thread.
 
-Once the lesson clicks, you run it. The lesson *is* a notebook: the same page you just read opens in **Google Colab** with a single click, so you can run and modify every example yourself. There is nothing to install, no environment to configure, no dependency conflicts to debug at midnight. Colab hosts the notebook in your browser, and for the deep-learning week it gives you **free GPU access**, so you can train real models without owning a GPU or paying for cloud time. You write and run code in the very place you read the explanation of what it does.
+Once the lesson clicks, you run it. The lesson *is* a notebook: the same page you just read opens in **Google Colab** with a single click, so you can run and modify every example yourself. There is nothing to install, no environment to configure, no dependency conflicts to debug at midnight. Colab hosts the notebook in your browser, and the deep-learning week's models are deliberately small — they train in seconds on Colab's free CPU tier, and the code will use a GPU automatically if Colab happens to offer one. Either way you train real models without owning a GPU or paying for cloud time. You write and run code in the very place you read the explanation of what it does.
 
 ## The `ddm4bio` library
 
