@@ -5,7 +5,8 @@
 **Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
 
 **Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 4
-(least squares & curve fitting) and Chapter 5 (sparsity and the Lasso).
+(least-squares curve fitting, polynomial and spline interpolation, and sparsity for
+curve fitting).
 
 Week 2 fit a model at a complexity *you* chose — a curve of a given form, a Lasso
 at a given penalty. This problem set asks the harder question you face when you do

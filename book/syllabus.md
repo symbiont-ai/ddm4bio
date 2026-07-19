@@ -26,7 +26,7 @@ You'll move fastest if you're comfortable with:
 - **Linear algebra** — vectors, matrices, eigenvalues/eigenvectors, and ideally having
   *seen* the SVD. Week 1 uses eigendecomposition fluently from day one.
 - **Probability & statistics** — distributions, variance, hypothesis testing and
-  p-values, and the idea of a *null distribution*. Weeks 3, 5, and 6 lean on base rates
+  p-values, and the idea of a *null distribution*. Weeks 3 and 6 lean on base rates
   and Bayes, permutation nulls, Type-I error, and selective inference.
 - **Python + NumPy** — comfortable writing *and modifying* scientific code, not writing
   your first program.
@@ -78,14 +78,14 @@ The heart of the course is the family of **data-driven methods** — the materia
 Kutz's textbook lives largely in its data-methods chapters. We spend our time on:
 
 - **Dimensionality reduction and factorization** — the singular value decomposition
-  (SVD), principal component analysis (PCA), robust PCA, and independent component
-  analysis (ICA).
-- **Signals, images, and sparsity** — Fourier and wavelet analysis, and compressed
+  (SVD), principal component analysis (PCA), robust PCA, independent component
+  analysis (ICA), and nonlinear neighbor embeddings (t-SNE, UMAP).
+- **Signals and sparsity** — Fourier and wavelet analysis, and compressed
   sensing.
 - **Machine learning** — both unsupervised (clustering, source separation) and
   supervised (classification, regression, generalization).
-- **Dynamics learned from data** — dynamic mode decomposition (DMD), Koopman-operator
-  ideas, sparse identification of nonlinear dynamics (SINDy), and data assimilation /
+- **Dynamics learned from data** — dynamic mode decomposition (DMD), sparse
+  identification of nonlinear dynamics (SINDy), and data assimilation /
   Kalman filtering.
 - **Deep learning** — linear and nonlinear autoencoders, a convolutional classifier, and
   sensing-and-reconstruction (SHRED) architectures in Week 8, with a reinforcement-learning
@@ -110,8 +110,10 @@ By the end of the course, you should be able to:
 2. **Wield large-scale linear algebra** — set up and solve linear systems, reason about
    eigenvalues and singular values, and use factorizations as practical analysis tools.
 3. **Reduce dimensionality and extract structure** from high-dimensional biological data
-   using SVD, PCA, robust PCA, and ICA, and interpret what the resulting components mean.
-4. **Analyze signals and images** with Fourier and wavelet transforms, and reconstruct
+   using SVD, PCA, robust PCA, ICA, and nonlinear neighbor embeddings (t-SNE, UMAP), and
+   interpret what the resulting components mean — including how neighbor embeddings can
+   distort global structure.
+4. **Analyze signals** with Fourier and wavelet transforms, and reconstruct
    signals from incomplete measurements using compressed sensing.
 5. **Build and validate machine-learning models** — choosing models sensibly, guarding
    against overfitting through cross-validation, and honestly assessing generalization,

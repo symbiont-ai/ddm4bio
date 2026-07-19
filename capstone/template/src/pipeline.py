@@ -6,8 +6,7 @@ measurements to a defensible dosing policy:
     load -> quality control (BEFORE results)
          -> fit a one-compartment PK model        (model-driven; validate t1/2)
          -> characterize the PD effect endpoint    (dose -> exposure -> effect)
-         -> characterize inter-patient variability  (data-driven)
-         -> calibrate a dosing environment from the fits
+         -> calibrate a dosing environment from the fitted clearance spread (data-driven)
          -> learn a dosing policy with RL           (value iteration + Q-learning)
          -> validate: policy holds effect in-range vs a fixed dose
          -> interpret with named limitations

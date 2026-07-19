@@ -4,12 +4,12 @@
 
 **Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
 
-**Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 13
-(regression, model evaluation), plus any introduction to sensitivity, specificity,
+**Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 13, sections 1–2
+(statistical methods — probability and Bayes' rule), plus any introduction to sensitivity, specificity,
 and Bayes' rule for predictive values.
 
-Week 3 measured how well a classifier **ranks** patients (AUC, generalization). But
-a deployed test does not rank — it **decides**: it flags a patient or clears them,
+Week 3 measured a classifier's **generalization** (accuracy); its scores also **rank**
+patients. But a deployed test does not just rank — it **decides**: it flags a patient or clears them,
 at a threshold. AUC is silent on where that threshold goes, and on how the same test
 behaves in a different population. This problem set is about the decision and its
 traps, on the real UCI heart-disease cohort.

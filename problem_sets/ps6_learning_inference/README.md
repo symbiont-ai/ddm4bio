@@ -4,8 +4,9 @@
 
 **Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
 
-**Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapters 15–16
-(clustering, classification), plus an introduction to multiple-testing / FDR and to
+**Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapters 17–18
+(unsupervised and supervised learning) and Chapter 13 (statistical methods and
+inference), plus an introduction to multiple-testing / FDR and to
 selective inference (post-selection / data-thinning).
 
 Week 6 clusters cells and then runs BH-FDR on per-feature t-tests **between the clusters

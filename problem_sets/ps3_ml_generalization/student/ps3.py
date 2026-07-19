@@ -1,9 +1,9 @@
 """Student template for PS3: from ranking to deciding.
 
-Week 3 measured how well a classifier *ranks* patients (AUC, generalization). But a
-deployed test does not rank -- it *decides*: it flags a patient or clears them, at a
-threshold. This problem set is about that decision and its traps, on the real UCI
-heart-disease cohort.
+Week 3 measured a classifier's *generalization* (accuracy); its scores also *rank*
+patients. But a deployed test does not just rank -- it *decides*: it flags a patient
+or clears them, at a threshold. This problem set is about that decision and its
+traps, on the real UCI heart-disease cohort.
 
 - Part A -- **choosing the operating threshold**: pick a cutoff for a stated cost
   trade-off and for a target sensitivity, and read off the sensitivity/specificity
