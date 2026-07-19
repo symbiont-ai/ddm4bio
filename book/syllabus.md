@@ -79,7 +79,8 @@ Kutz's textbook lives largely in its data-methods chapters. We spend our time on
 
 - **Dimensionality reduction and factorization** — the singular value decomposition
   (SVD), principal component analysis (PCA), robust PCA, independent component
-  analysis (ICA), and nonlinear neighbor embeddings (t-SNE, UMAP).
+  analysis (ICA), linear discriminant analysis (LDA), and nonlinear neighbor
+  embeddings (t-SNE, UMAP).
 - **Signals and sparsity** — Fourier and wavelet analysis, and compressed
   sensing.
 - **Machine learning** — both unsupervised (clustering, source separation) and
@@ -110,7 +111,7 @@ By the end of the course, you should be able to:
 2. **Wield large-scale linear algebra** — set up and solve linear systems, reason about
    eigenvalues and singular values, and use factorizations as practical analysis tools.
 3. **Reduce dimensionality and extract structure** from high-dimensional biological data
-   using SVD, PCA, robust PCA, ICA, and nonlinear neighbor embeddings (t-SNE, UMAP), and
+   using SVD, PCA, robust PCA, ICA, LDA, and nonlinear neighbor embeddings (t-SNE, UMAP), and
    interpret what the resulting components mean — including how neighbor embeddings can
    distort global structure.
 4. **Analyze signals** with Fourier and wavelet transforms, and reconstruct
