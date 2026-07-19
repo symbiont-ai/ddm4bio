@@ -225,21 +225,6 @@ DATASET_REGISTRY: dict[str, DatasetSpec] = {
         loader="ddm4bio.datasets.imaging_mri:load_fastmri",
         used_by=("ps4",),
     ),
-    "gdsc": DatasetSpec(
-        key="gdsc",
-        name="GDSC - Genomics of Drug Sensitivity in Cancer",
-        modality="tabular",
-        tier="open",
-        license="Free for academic/non-commercial use (Sanger/EMBL-EBI)",
-        citation=(
-            "Yang et al. (2013), Genomics of Drug Sensitivity in Cancer "
-            "(GDSC), Nucleic Acids Research 41(D1):D955-D961; Iorio et al. "
-            "(2016), Cell 166(3):740-754."
-        ),
-        url="https://www.cancerrxgene.org/",
-        loader="ddm4bio.datasets.omics:load_gdsc",
-        used_by=("wk2", "ps2"),
-    ),
     "tcga_expr": DatasetSpec(
         key="tcga_expr",
         name="TCGA gene expression (pan-cancer RNA-seq)",

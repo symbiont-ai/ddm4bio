@@ -1,10 +1,6 @@
 """Omics and tabular biomedical datasets.
 
 Datasets:
-- GDSC: Genomics of Drug Sensitivity in Cancer (drug dose-response).
-  Tier: open. License: GDSC terms (academic use). ``load_gdsc`` downloads a
-  dose-response CSV into ``cache_dir`` and returns a pandas DataFrame; on any
-  failure it returns a deterministic synthetic Hill-curve dose-response table.
 - TCGA: pan-cancer RNA-seq gene expression. Tier: open (GDC open-access).
   ``load_tcga`` attempts a SMALL public expression subset (size-guarded so it
   never forces a large download) and otherwise returns a synthetic
@@ -30,16 +26,7 @@ import numpy as np
 
 from ddm4bio.datasets.registry import LoadedDataset
 
-_GDSC_KEY = "gdsc"
 _TCGA_KEY = "tcga_expr"
-
-# GDSC bulk dose-response CSV (overridable via opts["url"]).
-_GDSC_URL = (
-    "https://cog.sanger.ac.uk/cancerrxgene/GDSC_release8.5/GDSC2_fitted_dose_response_27Oct23.csv"
-)
-_GDSC_LICENSE = (
-    "GDSC / Wellcome Sanger Institute & EMBL-EBI terms (free for academic / non-commercial use)"
-)
 
 # A small public TCGA expression subset (overridable via opts["url"]).
 _TCGA_URL = (
@@ -48,112 +35,6 @@ _TCGA_URL = (
 )
 _TCGA_LICENSE = "NIH Genomic Data Commons open-access data terms (UCSC Xena mirror)"
 _TCGA_MAX_BYTES = 50_000_000  # never force a large download
-
-
-def load_gdsc(
-    *,
-    cache_dir: Path | str,
-    download: bool = True,
-    prefer_real: bool = True,
-    seed: int | None = None,
-    **opts: Any,
-) -> LoadedDataset:
-    """Load GDSC drug dose-response data (real CSV, with synthetic fallback).
-
-    Parameters
-    ----------
-    cache_dir:
-        Directory for the cached CSV download (idempotent).
-    download:
-        When True, may download the real GDSC CSV.
-    prefer_real:
-        When True, prefer the real dataset over the synthetic fallback.
-    seed:
-        RNG seed making the synthetic Hill-curve fallback deterministic.
-    **opts:
-        ``url`` overrides the download URL.
-
-    Returns
-    -------
-    LoadedDataset
-        ``payload`` is a pandas ``DataFrame`` -- the real GDSC fitted
-        dose-response table, or a synthetic long-format Hill-curve table with
-        columns ``cell_line``/``drug``/``concentration``/``viability`` plus the
-        true ``ic50``/``hill`` parameters. ``source`` is ``"real"`` or
-        ``"fallback"``.
-    """
-    cache_dir = Path(cache_dir)
-
-    if download and prefer_real:
-        try:
-            return _load_gdsc_real(cache_dir, url=opts.get("url"))
-        except Exception:  # noqa: BLE001 -- always fall back on failure
-            reason = "real GDSC CSV download/parse failed (no network / bad URL)"
-    elif not download:
-        reason = "download=False requested"
-    else:
-        reason = "prefer_real=False requested"
-
-    return _gdsc_fallback(seed=seed, reason=reason)
-
-
-def _load_gdsc_real(cache_dir: Path, url: str | None) -> LoadedDataset:
-    """Download and parse the real GDSC dose-response CSV with pandas."""
-    import pandas as pd
-
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    url = url or _GDSC_URL
-    dest = cache_dir / "gdsc_dose_response.csv"
-    if not dest.exists():
-        urllib.request.urlretrieve(url, dest)  # noqa: S310 -- https source
-
-    frame = pd.read_csv(dest)
-    provenance = (
-        f"real: GDSC fitted dose-response CSV downloaded from {url} and cached "
-        f"at {dest}; parsed with pandas.read_csv; license: {_GDSC_LICENSE}; "
-        f"{frame.shape[0]} rows x {frame.shape[1]} columns."
-    )
-    return LoadedDataset(payload=frame, source="real", provenance=provenance, key=_GDSC_KEY)
-
-
-def _gdsc_fallback(*, seed: int | None, reason: str) -> LoadedDataset:
-    """Build a deterministic synthetic Hill-curve dose-response table."""
-    import pandas as pd
-
-    rng = np.random.default_rng(seed)
-    n_cell_lines = 20
-    n_drugs = 8
-    doses = np.logspace(-3.0, 1.0, 9)  # micromolar, log-spaced
-
-    records = []
-    for line in range(n_cell_lines):
-        for drug in range(n_drugs):
-            # True per-(line, drug) Hill parameters.
-            ic50 = float(10.0 ** rng.uniform(-2.0, 0.5))
-            hill = float(rng.uniform(0.7, 2.5))
-            for conc in doses:
-                signal = 1.0 / (1.0 + (conc / ic50) ** hill)
-                viability = float(np.clip(signal + rng.normal(0.0, 0.03), 0.0, 1.0))
-                records.append(
-                    {
-                        "cell_line": f"CL_{line:03d}",
-                        "drug": f"DRUG_{drug:02d}",
-                        "concentration": float(conc),
-                        "viability": viability,
-                        "ic50": ic50,
-                        "hill": hill,
-                    }
-                )
-
-    frame = pd.DataFrame.from_records(records)
-    provenance = (
-        f"synthetic/bundled fallback: {reason}. Long-format Hill-curve "
-        f"dose-response for {n_cell_lines} cell lines x {n_drugs} drugs at "
-        f"{doses.size} log-spaced concentrations; viability = "
-        "1/(1+(conc/ic50)^hill) with Gaussian noise; true ic50/hill included "
-        "(seeded, deterministic)."
-    )
-    return LoadedDataset(payload=frame, source="fallback", provenance=provenance, key=_GDSC_KEY)
 
 
 def load_tcga(
