@@ -1,7 +1,7 @@
 # Real Data and Synthetic Ground Truth
 
-One of [the course standards](how-it-works.md) is *ground-truth validation before
-trusting real data*. This page explains what that means for the data you'll
+One of [the course standards](how-it-works.md) is *ground-truth validation, then
+honest real-data claims*. This page explains what that means for the data you'll
 actually touch — because this course does two things that can look contradictory
 until you see why they belong together. It runs on **real biomedical data**, and
 it deliberately uses **synthetic data** in specific places. Here is the rule that
@@ -33,9 +33,12 @@ answer — and real biological data has none. Nobody knows the true independent
 sources inside a real single-cell dataset, or the true governing equation of a
 real epidemic.
 
-So you do what working scientists do: **plant a known answer in synthetic data,
-prove your method recovers it, and only then turn the method loose on real
-data**, where you make a smaller, honest claim.
+So you do what working scientists do: **plant a known answer in synthetic data and
+confirm your method recovers it** — verifying the implementation under stated
+assumptions — and only then apply the method to real data. That synthetic check is
+necessary, not sufficient: the real-data conclusion still needs its own data-specific
+QC, sensitivity analysis, and external or biological validation, so the claim you make
+there stays appropriately smaller.
 
 - In **Week 5** you score ICA on a synthetic mixture whose sources you injected,
   then apply PCA to real pbmc3k cells (whose true sources are unknown, so that
