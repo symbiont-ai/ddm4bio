@@ -20,6 +20,12 @@ the specific chapters.
 :filter: key in {"yang2023medmnist"}
 ```
 
+## Week 2 — Curve fitting, differentiation, and sparsity
+
+```{bibliography}
+:filter: key in {"barretina2012ccle", "yang2013gdsc", "iorio2016gdsc"}
+```
+
 ## Week 4 — Signals: Fourier, wavelets, and compressed sensing
 
 ```{bibliography}

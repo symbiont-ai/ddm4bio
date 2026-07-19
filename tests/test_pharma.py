@@ -12,9 +12,23 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from ddm4bio.datasets.pharma import load_warfarin
+from ddm4bio.datasets.pharma import load_ccle, load_warfarin
 
 _COLUMNS = ["id", "time", "amt", "dv", "dvid", "evid", "wt", "age", "sex"]
+_CCLE_COLUMNS = [
+    "cell_line",
+    "compound",
+    "target",
+    "concentration",
+    "activity",
+    "activity_sd",
+    "ec50_pub",
+    "ic50_pub",
+    "amax_pub",
+    "actarea_pub",
+    "fit_type",
+    "n_doses",
+]
 
 
 def test_fallback_schema_and_determinism(tmp_path):
@@ -55,3 +69,47 @@ def test_loader_contract_holds_for_whichever_source(tmp_path):
     assert list(ds.payload.columns) == _COLUMNS
     assert set(ds.payload["dvid"].unique()) == {"cp", "pca"}
     assert ds.payload["id"].nunique() >= 30
+
+
+def _panobinostat(frame):
+    """The compound x cell-line series the Week-2 notebook fits."""
+    return frame[
+        (frame["compound"] == "Panobinostat") & (frame["cell_line"] == "NCI-H2023")
+    ].sort_values("concentration")
+
+
+def test_ccle_fallback_schema_and_determinism(tmp_path):
+    a = load_ccle(cache_dir=tmp_path, prefer_real=False, seed=0)
+    b = load_ccle(cache_dir=tmp_path, prefer_real=False, seed=0)
+
+    assert a.source == "fallback"
+    assert a.key == "ccle"
+    assert list(a.payload.columns) == _CCLE_COLUMNS
+    # The notebook's selected series exists offline, with eight concentrations.
+    assert len(_panobinostat(a.payload)) == 8
+    # Deterministic under a fixed seed.
+    assert a.payload.equals(b.payload)
+
+
+def test_ccle_fallback_has_dose_response_shape(tmp_path):
+    ds = load_ccle(cache_dir=tmp_path, prefer_real=False, seed=0)
+    sel = _panobinostat(ds.payload)
+    act = sel["activity"].to_numpy()
+
+    # Activity falls from ~DMSO control to strong growth inhibition (negative).
+    assert act[0] > act[-1]
+    assert act.min() < -50.0
+    # Per-dose replicate SDs are positive; the published summary is one value/series.
+    assert (sel["activity_sd"].to_numpy() > 0).all()
+    assert sel["ec50_pub"].nunique() == 1
+    assert sel["amax_pub"].iloc[0] < 0.0
+
+
+@pytest.mark.network
+def test_ccle_loader_contract_holds_for_whichever_source(tmp_path):
+    # Real if reachable, else the fallback -- either way the tidy long schema and
+    # at least one full eight-point series must be present.
+    ds = load_ccle(cache_dir=tmp_path, prefer_real=True, seed=0)
+    assert ds.source in {"real", "fallback"}
+    assert list(ds.payload.columns) == _CCLE_COLUMNS
+    assert ds.payload.groupby(["compound", "cell_line"]).size().max() >= 8

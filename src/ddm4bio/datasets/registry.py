@@ -315,6 +315,24 @@ DATASET_REGISTRY: dict[str, DatasetSpec] = {
         loader="ddm4bio.datasets.pharma:load_warfarin",
         used_by=("capstone",),
     ),
+    "ccle": DatasetSpec(
+        key="ccle",
+        name="CCLE pharmacological profiling (dose-response)",
+        modality="tabular",
+        tier="open",
+        license="CC BY 4.0 (Broad/DepMap; Zenodo 10.5281/zenodo.3905462)",
+        citation=(
+            "Barretina et al. (2012), The Cancer Cell Line Encyclopedia enables "
+            "predictive modelling of anticancer drug sensitivity, Nature "
+            "483:603-607."
+        ),
+        url=(
+            "https://data.broadinstitute.org/ccle_legacy_data/"
+            "pharmacological_profiling/CCLE_NP24.2009_Drug_data_2015.02.24.csv"
+        ),
+        loader="ddm4bio.datasets.pharma:load_ccle",
+        used_by=("wk2",),
+    ),
 }
 
 
