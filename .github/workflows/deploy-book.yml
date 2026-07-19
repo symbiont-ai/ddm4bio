@@ -69,7 +69,7 @@ jobs:
           # Real fetches are cached, so retries re-hit the network only while a
           # source is still down.
           python scripts/fetch_data.py --require-real --retries 3 --delay 15 \
-            bloodmnist breast_wisconsin gdsc heart_uci jhu_covid mitbih pbmc3k
+            bloodmnist breast_wisconsin ccle heart_uci jhu_covid mitbih pbmc3k
 
       - name: Build the book
         run: |
