@@ -23,7 +23,7 @@ the specific chapters.
 ## Week 2 — Curve fitting, differentiation, and sparsity
 
 ```{bibliography}
-:filter: key in {"barretina2012ccle", "yang2013gdsc", "iorio2016gdsc"}
+:filter: key in {"barretina2012ccle"}
 ```
 
 ## Week 4 — Signals: Fourier, wavelets, and compressed sensing
