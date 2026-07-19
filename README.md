@@ -2,12 +2,13 @@
 
 **Data-Driven Methods for the Life Sciences** — a
 reproducible graduate-course repository: a pip-installable teaching library
-(`ddm4bio`) plus lecture-demo notebooks, problem sets, and a capstone.
+(`ddm4bio`) plus a full JupyterBook course site (eight weekly lessons, problem
+sets, and a warfarin PK/PD capstone).
 
 Content follows J. N. Kutz, *Data-Driven Modeling & Scientific Computation*
-(2nd ed.). This repo is built in phases; **Phase 0 is the scaffold** — the
-package tree, interfaces, config, tests, and CI are in place, while method
-bodies are stubs to be filled in later phases.
+(2nd ed.); all explanations, code, and examples are original and the course does
+not reproduce that text. The site is built from this repo and deployed by CI to
+**<https://symbiont-ai.github.io/ddm4bio/>**.
 
 ## Quickstart
 
@@ -48,7 +49,7 @@ pip install -e ".[imaging]"     # medmnist, scikit-image, nibabel
 
 ```
 src/ddm4bio/   shared library (config, qc, viz, methods, datasets, utils, interpret)
-book/          JupyterBook course site: 8 weekly lessons + syllabus, schedule, references
+book/          JupyterBook course site: 8 weekly lessons, syllabus, schedule, references, capstone + RL preview
 problem_sets/  7 problem-set briefs (README + student scaffold + rubric); solutions + autograders are in the private instructor repo
 capstone/      spec, rubric, runnable template, and section linter
 data/          DATA_CARD.md + gitignored raw/ and cache/
