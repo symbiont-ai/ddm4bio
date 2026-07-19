@@ -27,11 +27,12 @@ instructions, or returns the open/synthetic fallback).
 | `mitbih` | MIT-BIH Arrhythmia Database (ECG) | signals | open | ODC-BY v1.0 (PhysioNet) ✓ | `wfdb` from physionet.org (cached); fallback: synthetic ECG | wk4, ps4, wk7, ps7 |
 | `ixi_mri` | IXI Brain MRI Dataset | imaging | open | CC BY-SA 3.0 ✓ | direct NIfTI download via `nibabel` (cached); fallback: Shepp–Logan phantom | ps4 |
 | `fastmri` | fastMRI (NYU Langone / Meta AI) | imaging | **credentialed** | fastMRI Dataset Sharing Agreement (non-commercial research) ✓ | apply at fastmri.med.nyu.edu; loader raises `PermissionError` — do **not** auto-download; fallback: synthetic k-space / `ixi_mri` | ps4 |
-| `ccle` | CCLE pharmacological profiling (dose–response) | tabular | open | CC BY 4.0 (CCLE; Broad/DepMap terms) ✓ | direct CSV from data.broadinstitute.org (cached), exploded to per-concentration long form; fallback: synthetic Hill dose–response | wk2 |
 | `tcga_expr` | TCGA gene expression (pan-cancer RNA-seq) | tabular | open | NIH GDC open-access data terms [VERIFY] | GDC API / direct download (cached, heavy); fallback: synthetic expression | ps6, capstone |
 | `jhu_covid` | JHU CSSE COVID-19 time series | timeseries | archive | CC BY 4.0 (JHU, non-commercial terms) [VERIFY] | static GitHub CSVs (frozen); fallback: synthetic epidemic curve | wk7, ps7 |
 | `heart_uci` | UCI Heart Disease (Cleveland) | tabular | open | CC BY 4.0 (UCI ML Repository) ✓ | direct CSV from archive.ics.uci.edu (cached); fallback: synthetic clinical tabular | ps3 |
 | `breast_wisconsin` | Breast Cancer Wisconsin (Diagnostic) | tabular | open | CC BY 4.0 (UCI) / bundled in scikit-learn ✓ | `sklearn.datasets.load_breast_cancer` (bundled, no network → `source="real"`); fallback: synthetic tabular | wk2, wk3, wk6, ps2, ps3, ps6 |
+| `warfarin` | Warfarin PK/PD (single oral dose) | timeseries | open | GPL (>=3) (nlmixr2data); data O'Reilly & Aggeler (1968), Holford (1986) ✓ | direct `.rda` from nlmixr2data GitHub via `urlretrieve`+`pyreadr` (cached), or the course data-mirror-v1 CSV; fallback: synthetic one-compartment PK + turnover PD | capstone |
+| `ccle` | CCLE pharmacological profiling (dose–response) | tabular | open | CC BY 4.0 (CCLE; Broad/DepMap terms) ✓ | direct CSV from data.broadinstitute.org (cached), exploded to per-concentration long form; fallback: synthetic Hill dose–response | wk2 |
 
 > **✓ = confirmed** against `DATASET_REGISTRY` (license/tier match the registry
 > spec and the loader is implemented).
