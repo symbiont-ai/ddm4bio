@@ -78,7 +78,8 @@ def hill(
     ec50 : float
         Concentration giving half-maximal response.
     n : float
-        Hill coefficient (cooperativity / steepness).
+        Hill coefficient: steepness of the transition (a binding-cooperativity index in
+        receptor assays; an empirical steepness for phenotypic/viability readouts).
 
     Returns
     -------
