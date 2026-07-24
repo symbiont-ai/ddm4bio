@@ -208,7 +208,7 @@ DATASET_REGISTRY: dict[str, DatasetSpec] = {
         ),
         url=("https://archive.ics.uci.edu/dataset/17/breast+cancer+wisconsin+diagnostic"),
         loader="ddm4bio.datasets.tabular:load_breast_wisconsin",
-        used_by=("wk2", "wk3", "wk6", "ps2", "ps3", "ps6"),
+        used_by=("wk2", "wk6", "ps2"),
     ),
     "warfarin": DatasetSpec(
         key="warfarin",
