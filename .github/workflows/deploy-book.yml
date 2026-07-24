@@ -44,7 +44,7 @@ jobs:
           # wfdb so weeks 4 & 7 fetch the real MIT-BIH ECG from PhysioNet; without it
           # get_dataset("mitbih") drops to a labeled synthetic fallback on the site.
           pip install wfdb
-          # torch so week 8 (autoencoders + SHRED) executes on the site. The CPU wheel
+          # torch so week 8 (autoencoders + CNN) executes on the site. The CPU wheel
           # index keeps the build light -- the runner has no GPU, and the lesson is
           # device-agnostic (torch.cuda.is_available() -> cpu here, cuda on Colab).
           pip install --index-url https://download.pytorch.org/whl/cpu torch
@@ -58,8 +58,8 @@ jobs:
           # Download the datasets the lessons use INTO THE CACHE before the timed
           # build, so notebook cells read cached data instead of downloading inside
           # a timeout-limited cell (a cold BloodMNIST fetch once exceeded the cell
-          # timeout and broke wk1). This step has no per-cell timeout. Only the
-          # lesson datasets are warmed -- not heavy unused ones (TCGA/MNE/IXI).
+          # timeout and broke wk5a). This step has no per-cell timeout. Only the
+          # lesson datasets are warmed; the loaders' synthetic fallbacks cover the rest.
           #
           # --require-real FAILS THIS STEP (fast) if any source is unavailable,
           # after retrying transient outages a few times (e.g. PhysioNet for

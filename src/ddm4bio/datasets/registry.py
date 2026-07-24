@@ -135,22 +135,6 @@ DATASET_REGISTRY: dict[str, DatasetSpec] = {
         used_by=("wk5", "wk8", "ps1"),
         loader_opts={"name": "bloodmnist"},
     ),
-    "pathmnist": DatasetSpec(
-        key="pathmnist",
-        name="PathMNIST (MedMNIST v2)",
-        modality="images",
-        tier="open",
-        license="CC BY 4.0",
-        citation=(
-            "Yang et al. (2023), MedMNIST v2: A large-scale lightweight "
-            "benchmark for 2D and 3D biomedical image classification, "
-            "Scientific Data 10:41. Source patches: Kather et al. (2019)."
-        ),
-        url="https://medmnist.com/",
-        loader="ddm4bio.datasets.medmnist_images:load_medmnist",
-        used_by=("wk6", "ps6"),
-        loader_opts={"name": "pathmnist"},
-    ),
     "pbmc3k": DatasetSpec(
         key="pbmc3k",
         name="10x Genomics PBMC 3k (single-cell RNA-seq)",
@@ -165,21 +149,7 @@ DATASET_REGISTRY: dict[str, DatasetSpec] = {
             "https://cf.10xgenomics.com/samples/cell/pbmc3k/pbmc3k_filtered_gene_bc_matrices.tar.gz"
         ),
         loader="ddm4bio.datasets.singlecell:load_pbmc3k",
-        used_by=("wk5", "ps5"),
-    ),
-    "mne_eeg": DatasetSpec(
-        key="mne_eeg",
-        name="MNE sample EEG/MEG dataset",
-        modality="signals",
-        tier="open",
-        license="BSD-3-Clause (MNE-Python sample data)",
-        citation=(
-            "Gramfort et al. (2013), MEG and EEG data analysis with "
-            "MNE-Python, Frontiers in Neuroscience 7:267."
-        ),
-        url="https://mne.tools/stable/documentation/datasets.html",
-        loader="ddm4bio.datasets.neuro:load_eeg",
-        used_by=("wk4", "ps4"),
+        used_by=("wk5", "wk6", "ps5", "ps6"),
     ),
     "mitbih": DatasetSpec(
         key="mitbih",
@@ -195,50 +165,6 @@ DATASET_REGISTRY: dict[str, DatasetSpec] = {
         url="https://physionet.org/content/mitdb/1.0.0/",
         loader="ddm4bio.datasets.physio:load_mitbih",
         used_by=("wk4", "ps4", "wk7", "ps7"),
-    ),
-    "ixi_mri": DatasetSpec(
-        key="ixi_mri",
-        name="IXI Brain MRI Dataset",
-        modality="imaging",
-        tier="open",
-        license="CC BY-SA 3.0",
-        citation=(
-            "IXI - Information eXtraction from Images, Biomedical Image "
-            "Analysis Group, Imperial College London."
-        ),
-        url="https://brain-development.org/ixi-dataset/",
-        loader="ddm4bio.datasets.imaging_mri:load_ixi",
-        used_by=("ps4",),
-    ),
-    "fastmri": DatasetSpec(
-        key="fastmri",
-        name="fastMRI (NYU Langone / Meta AI)",
-        modality="imaging",
-        tier="credentialed",
-        license=("fastMRI Dataset Sharing Agreement (credentialed; non-commercial research only)"),
-        citation=(
-            "Zbontar et al. (2018), fastMRI: An Open Dataset and Benchmarks "
-            "for Accelerated MRI, arXiv:1811.08839; Knoll et al. (2020), "
-            "Radiology: Artificial Intelligence 2(1):e190007."
-        ),
-        url="https://fastmri.med.nyu.edu/",
-        loader="ddm4bio.datasets.imaging_mri:load_fastmri",
-        used_by=("ps4",),
-    ),
-    "tcga_expr": DatasetSpec(
-        key="tcga_expr",
-        name="TCGA gene expression (pan-cancer RNA-seq)",
-        modality="tabular",
-        tier="open",
-        license="NIH Genomic Data Commons open-access data terms",
-        citation=(
-            "The Cancer Genome Atlas Research Network (2013), The Cancer "
-            "Genome Atlas Pan-Cancer analysis project, Nature Genetics "
-            "45(10):1113-1120."
-        ),
-        url="https://portal.gdc.cancer.gov/",
-        loader="ddm4bio.datasets.omics:load_tcga",
-        used_by=("ps6", "capstone"),
     ),
     "jhu_covid": DatasetSpec(
         key="jhu_covid",
@@ -267,7 +193,7 @@ DATASET_REGISTRY: dict[str, DatasetSpec] = {
         ),
         url="https://archive.ics.uci.edu/dataset/45/heart+disease",
         loader="ddm4bio.datasets.tabular:load_heart_uci",
-        used_by=("ps3",),
+        used_by=("wk3", "ps3"),
     ),
     "breast_wisconsin": DatasetSpec(
         key="breast_wisconsin",
@@ -378,8 +304,7 @@ def get_dataset(
     loader = getattr(module, func_name)
 
     # Pass the registry key plus any per-spec ``loader_opts`` (e.g. the MedMNIST
-    # subset name), so a loader shared across several keys (``load_medmnist``
-    # serving both ``bloodmnist`` and ``pathmnist``) selects the right subset
+    # subset name in ``load_medmnist``), so a loader selects its subset
     # EXPLICITLY from the spec rather than inferring it from the key. Caller opts
     # override spec ``loader_opts``; loaders that don't need these absorb ``key``
     # and the extra opts into ``**opts`` and ignore them.

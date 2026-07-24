@@ -1,6 +1,6 @@
 """MedMNIST image datasets.
 
-Dataset: MedMNIST v2 (e.g. BloodMNIST, PathMNIST, DermaMNIST).
+Dataset: MedMNIST v2 (BloodMNIST).
 Tier: open.
 License: CC BY 4.0.
 Real source: the per-collection ``.npz`` files published on Zenodo (record
@@ -132,7 +132,7 @@ def load_medmnist(
         Seed for the deterministic fallback split.
     key:
         Registry key forwarded by the dispatcher; it IS the MedMNIST subset to
-        fetch (e.g. ``"bloodmnist"``, ``"pathmnist"``). Drives the download URL,
+        fetch (e.g. ``"bloodmnist"``). Drives the download URL,
         the cache filename, and the stamped provenance/key.
     name:
         Optional explicit MedMNIST subset override for direct callers; when

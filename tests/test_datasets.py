@@ -9,10 +9,9 @@ scikit-learn dataset and honour only ``prefer_real``, so ``download=False``
 alone would still yield ``source="real"``. Passing ``prefer_real=False`` too
 forces the synthetic/bundled fallback uniformly across all loaders.
 
-Also covered: unknown-key ``KeyError``, the credentialed ``fastmri`` contract
-(``PermissionError`` when a real download is requested, fallback otherwise),
-registry/spec integrity via ``list_datasets``, and fallback determinism under a
-fixed seed. All assertions run fully offline.
+Also covered: unknown-key ``KeyError``, registry/spec integrity via
+``list_datasets``, and fallback determinism under a fixed seed. All assertions
+run fully offline.
 """
 
 from __future__ import annotations
@@ -73,23 +72,6 @@ def test_unknown_key_raises_keyerror():
         get_dataset("no_such_key")
 
 
-def test_fastmri_real_request_raises_permission_error():
-    """Credentialed fastMRI refuses to auto-download real data."""
-    with pytest.raises(PermissionError):
-        get_dataset("fastmri", download=True, prefer_real=True)
-
-
-def test_fastmri_offline_returns_fallback():
-    """fastMRI with download disabled yields the open fallback, never raises."""
-    loaded = get_dataset("fastmri", download=False)
-
-    assert isinstance(loaded, LoadedDataset)
-    assert loaded.source == "fallback"
-    assert loaded.payload is not None
-    assert loaded.key == "fastmri"
-    assert loaded.provenance.strip() != ""
-
-
 def test_list_datasets_matches_registry():
     """list_datasets returns exactly one spec per registry entry."""
     specs = list_datasets()
@@ -116,14 +98,4 @@ def test_pbmc3k_fallback_is_deterministic():
 
     assert a.source == b.source == "fallback"
     assert np.array_equal(a.payload["counts"], b.payload["counts"])
-    assert np.array_equal(a.payload["labels"], b.payload["labels"])
-
-
-def test_tcga_fallback_is_deterministic():
-    """The synthetic tumor-vs-normal expression fallback is reproducible."""
-    a = get_dataset("tcga_expr", download=False, prefer_real=False, seed=7)
-    b = get_dataset("tcga_expr", download=False, prefer_real=False, seed=7)
-
-    assert a.source == b.source == "fallback"
-    assert np.array_equal(a.payload["expression"], b.payload["expression"])
     assert np.array_equal(a.payload["labels"], b.payload["labels"])

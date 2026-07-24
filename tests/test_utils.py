@@ -23,19 +23,19 @@ from ddm4bio.utils import io, timers
 # --------------------------------------------------------------------------- #
 def test_safe_cache_path_plain_key_under_cache_dir(tmp_path):
     root = tmp_path / "cache"
-    result = io.safe_cache_path("pathmnist", cache_dir=root)
+    result = io.safe_cache_path("bloodmnist", cache_dir=root)
 
     assert isinstance(result, Path)
     # Result must live under the intended cache root.
-    assert result.resolve() == (root / "pathmnist").resolve()
+    assert result.resolve() == (root / "bloodmnist").resolve()
     assert root.resolve() in result.resolve().parents
 
 
 def test_safe_cache_path_nested_key_builds_subdirs(tmp_path):
     root = tmp_path / "cache"
-    result = io.safe_cache_path("medmnist/pathmnist", cache_dir=root)
+    result = io.safe_cache_path("medmnist/bloodmnist", cache_dir=root)
 
-    assert result.resolve() == (root / "medmnist" / "pathmnist").resolve()
+    assert result.resolve() == (root / "medmnist" / "bloodmnist").resolve()
     assert root.resolve() in result.resolve().parents
 
 
@@ -93,8 +93,8 @@ def test_safe_cache_path_all_unsafe_key_yields_placeholder(tmp_path):
 
 def test_safe_cache_path_is_deterministic(tmp_path):
     root = tmp_path / "cache"
-    first = io.safe_cache_path("medmnist/pathmnist", cache_dir=root)
-    second = io.safe_cache_path("medmnist/pathmnist", cache_dir=root)
+    first = io.safe_cache_path("medmnist/bloodmnist", cache_dir=root)
+    second = io.safe_cache_path("medmnist/bloodmnist", cache_dir=root)
 
     assert first == second
 

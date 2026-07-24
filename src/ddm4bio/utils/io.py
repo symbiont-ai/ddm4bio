@@ -18,7 +18,7 @@ def safe_cache_path(key: str, cache_dir: str | Path | None = None) -> Path:
     Parameters
     ----------
     key:
-        An opaque dataset identifier (e.g. ``"medmnist/pathmnist"`` or a URL).
+        An opaque dataset identifier (e.g. ``"medmnist/bloodmnist"`` or a URL).
         The key is sanitized into a safe relative path: any character outside
         ``[A-Za-z0-9._-]`` (including path separators) is replaced with ``_``,
         and ``..`` traversal segments are neutralized, so the result can never
