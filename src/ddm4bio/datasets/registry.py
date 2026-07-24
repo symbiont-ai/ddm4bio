@@ -132,7 +132,7 @@ DATASET_REGISTRY: dict[str, DatasetSpec] = {
         ),
         url="https://medmnist.com/",
         loader="ddm4bio.datasets.medmnist_images:load_medmnist",
-        used_by=("wk1", "ps1"),
+        used_by=("wk5", "wk8", "ps1"),
         loader_opts={"name": "bloodmnist"},
     ),
     "pathmnist": DatasetSpec(

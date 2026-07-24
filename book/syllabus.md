@@ -23,7 +23,8 @@ gatekeeping.
 You'll move fastest if you're comfortable with:
 
 - **Linear algebra** — vectors, matrices, eigenvalues/eigenvectors, and ideally having
-  *seen* the SVD. Week 1 uses eigendecomposition fluently from day one.
+  *seen* the SVD. Week 1 sets up and solves linear systems and reads conditioning off the
+  singular values from day one; Week 5 then uses the SVD and eigendecomposition fluently for PCA.
 - **Probability & statistics** — distributions, variance, hypothesis testing and
   p-values, and the idea of a *null distribution*. Weeks 3 and 6 lean on base rates
   and Bayes, permutation nulls, Type-I error, and selective inference.
@@ -36,7 +37,8 @@ A prior **machine-learning course is recommended, not required.** With one, Week
 and the deep-learning week (8) go smoothly; without one, those are the steep parts —
 reachable, just steeper. Everything else assumes only the bar above.
 
-**Rusty? Brush up on** the SVD and eigendecomposition (what singular values mean and how
+**Rusty? Brush up on** solving linear systems and least squares (the normal equations and the
+pseudoinverse), the SVD and eigendecomposition (what singular values mean and how
 to read them), hypothesis testing and null / permutation distributions, and NumPy array
 indexing and linear-algebra calls. Those carry the most weight early on.
 

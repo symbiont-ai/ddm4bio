@@ -5,19 +5,13 @@ choices, grouped by the week — and the capstone — that draws on them. They a
 recommended reading and as pointers to the original treatments of each algorithm; nothing
 from them is reproduced in these pages, and each lesson names the sources it draws on so you
 can trace an idea back to its original treatment and read the authors in their own words.
-Weeks 2, 3, and 6 build directly on the course textbook — see each lesson's reading note for
+Most lessons build directly on the course textbook — see each lesson's reading note for
 the specific chapters.
 
 ## Course textbook
 
 ```{bibliography}
 :filter: key in {"kutz2013ddm"}
-```
-
-## Week 1 — Foundations and eigen-images
-
-```{bibliography}
-:filter: key in {"yang2023medmnist"}
 ```
 
 ## Week 2 — Curve fitting, differentiation, and sparsity
@@ -32,10 +26,10 @@ the specific chapters.
 :filter: key in {"donoho2006cs"}
 ```
 
-## Week 5 — Dimensionality reduction
+## Week 5 — Dimensionality reduction and blood-cell images
 
 ```{bibliography}
-:filter: key in {"hyvarinen2000ica", "candes2011rpca", "maaten2008tsne", "mcinnes2018umap"}
+:filter: key in {"yang2023medmnist", "hyvarinen2000ica", "candes2011rpca", "maaten2008tsne", "mcinnes2018umap"}
 ```
 
 ## Week 7 — Dynamics from data

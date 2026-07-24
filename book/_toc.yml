@@ -9,11 +9,12 @@ parts:
       - file: data-and-ground-truth
   - caption: Lessons
     chapters:
-      - file: lessons/wk1_eigen_images
+      - file: lessons/wk1_linear_systems
       - file: lessons/wk2_curvefit_sparsity
       - file: lessons/wk3_ml_generalization
       - file: lessons/wk4_signals_cs
-      - file: lessons/wk5_svd_pca_ica
+      - file: lessons/wk5a_linear_subspaces
+      - file: lessons/wk5b_sources_manifolds
       - file: lessons/wk6_cluster_classify
       - file: lessons/wk7_dynamics
       - file: lessons/wk8_deep_learning

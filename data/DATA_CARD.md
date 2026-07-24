@@ -20,7 +20,7 @@ instructions, or returns the open/synthetic fallback).
 
 | Key | Dataset | Modality | Tier | License | Access / how-to-fetch | Used by |
 |---|---|---|---|---|---|---|
-| `bloodmnist` | BloodMNIST (MedMNIST v2) | images | open | CC BY 4.0 ✓ | `.npz` over HTTPS from medmnist.com (`urlopen`, cached); fallback: synthetic images | wk1, ps1 |
+| `bloodmnist` | BloodMNIST (MedMNIST v2) | images | open | CC BY 4.0 ✓ | `.npz` over HTTPS from medmnist.com (`urlopen`, cached); fallback: synthetic images | wk5, wk8, ps1 |
 | `pathmnist` | PathMNIST (MedMNIST v2) | images | open | CC BY 4.0 ✓ | `.npz` over HTTPS from medmnist.com (`urlopen`, cached); fallback: synthetic images | wk6, ps6 |
 | `pbmc3k` | 10x PBMC 3k (single-cell RNA-seq) | singlecell | open | Creative Commons / 10x Genomics terms of use [VERIFY] | `scanpy` built-in or 10x `.tar.gz` (cached); fallback: synthetic counts | wk5, ps5 |
 | `mne_eeg` | MNE sample EEG/MEG dataset | signals | open | BSD-3-Clause (MNE sample data) ✓ | `mne.datasets.sample` fetch; fallback: synthetic EEG | wk4, ps4 |

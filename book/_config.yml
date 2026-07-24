@@ -7,7 +7,7 @@ execute:
   execute_notebooks: force
   # Headroom for a slow runner; the deploy also pre-warms the dataset cache so
   # notebook cells read cached data instead of downloading inside a timed cell
-  # (a cold BloodMNIST fetch once exceeded the old 120s limit and broke wk1).
+  # (a cold BloodMNIST fetch once exceeded the old 120s limit and broke wk5a).
   timeout: 300
 
 html:
