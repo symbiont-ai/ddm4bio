@@ -41,7 +41,7 @@ the specific chapters.
 ## Week 8 — Deep learning
 
 ```{bibliography}
-:filter: key in {"williams2024shred", "sainburg2021pumap"}
+:filter: key in {"sainburg2021pumap"}
 ```
 
 ## Capstone — Warfarin PK/PD to a dosing policy
