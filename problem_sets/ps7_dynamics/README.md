@@ -4,8 +4,9 @@
 
 **Work in the browser:** click the badge to open this problem set in Google Colab — no local setup required. You can also work locally (see below).
 
-**Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 7
-(dynamical systems, DMD/SINDy), plus any introduction to chaos and the Lyapunov exponent.
+**Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapters 15
+(dynamic mode decomposition) and 20-21 (SINDy and data assimilation / Kalman filtering),
+plus any introduction to chaos and the Lyapunov exponent.
 
 Module 7 **fits** data-driven models (DMD, SINDy, Kalman) and reports a one-shot forecast
 error at a fixed horizon. This problem set — the course **finale** — asks the question

@@ -18,7 +18,7 @@ BloodMNIST cell crops, the Wisconsin breast-cytology panel, UCI heart-disease
 records, MIT-BIH ECG, 10x pbmc3k single cells, the JHU COVID-19 series, and more.
 Whenever that dataset carries the label or target your claim is about, you score
 your result **on the real data itself** — real inputs, real labels, a real
-held-out test. When you classify blood-cell images (Module 5), diagnose heart
+held-out test. When you classify blood-cell images (Module 5a), diagnose heart
 disease (Problem Set 3), or read a breast-cytology panel (Problem Set 6), the
 accuracy or AUC you report is measured on real samples and real patients.
 
