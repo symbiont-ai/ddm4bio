@@ -7,7 +7,7 @@
 **Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 14
 (sparsity and compressed sensing; the FFT and L1 recovery).
 
-Week 4 reconstructs **one** sparse signal from **one** set of compressed
+Module 4 reconstructs **one** sparse signal from **one** set of compressed
 measurements — it shows that compressed sensing *works*. This problem set asks the
 question underneath that demo: **how few measurements can you get away with?**
 Compressed sensing does not degrade gracefully — below a sharp threshold recovery

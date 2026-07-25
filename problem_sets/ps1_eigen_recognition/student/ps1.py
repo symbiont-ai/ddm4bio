@@ -1,6 +1,6 @@
 """Student template for PS1: the eigen-subspace as a model of normal cells.
 
-Week 5a built an eigen-image basis and used it to *recognize* cells. Here you turn
+Module 5a built an eigen-image basis and used it to *recognize* cells. Here you turn
 the same basis into a **model of what a normal cell looks like** and put it to two
 new uses on real BloodMNIST:
 
@@ -31,7 +31,7 @@ from ddm4bio.interpret import interpretation_block
 from ddm4bio.qc.report import assert_no_leakage
 
 # --------------------------------------------------------------------------- #
-# Provided: data + eigen-basis primitives (do not edit; these are Week 5a's)    #
+# Provided: data + eigen-basis primitives (do not edit; these are Module 5a's)    #
 # --------------------------------------------------------------------------- #
 
 
@@ -57,9 +57,9 @@ def load_blood_cells(
 
 
 def eigen_basis(x: np.ndarray, n_modes: int) -> tuple[np.ndarray, np.ndarray]:
-    """(provided, from Week 5a) Per-feature mean + top-``n_modes`` principal axes.
+    """(provided, from Module 5a) Per-feature mean + top-``n_modes`` principal axes.
 
-    Computed with NumPy's SVD directly, exactly as the Week 5a lesson does it: the
+    Computed with NumPy's SVD directly, exactly as the Module 5a lesson does it: the
     right singular vectors of the mean-centred library are the eigen-images.
     """
     mean_vec = x.mean(axis=0)
@@ -68,12 +68,12 @@ def eigen_basis(x: np.ndarray, n_modes: int) -> tuple[np.ndarray, np.ndarray]:
 
 
 def project(x: np.ndarray, mean_vec: np.ndarray, components: np.ndarray) -> np.ndarray:
-    """(provided, from Week 5a) Coordinates of ``x`` in the eigen-basis."""
+    """(provided, from Module 5a) Coordinates of ``x`` in the eigen-basis."""
     return (x - mean_vec) @ components.T
 
 
 def reconstruct(coords: np.ndarray, mean_vec: np.ndarray, components: np.ndarray) -> np.ndarray:
-    """(provided, from Week 5a) Map basis coordinates back to pixel space."""
+    """(provided, from Module 5a) Map basis coordinates back to pixel space."""
     return coords @ components + mean_vec
 
 

@@ -1,6 +1,6 @@
 """Student template for PS2: letting the data choose the model.
 
-Week 2 fit a model at a complexity you picked. Here you face the real question:
+Module 2 fit a model at a complexity you picked. Here you face the real question:
 when you do NOT know the truth, how complex a model does the data support? The
 answer is **cross-validation** — score each candidate on data it was not fit on,
 and let held-out error choose.

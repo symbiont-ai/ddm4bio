@@ -2,7 +2,7 @@
 
 **Data-Driven Methods for the Life Sciences** — a
 reproducible graduate-course repository: a pip-installable teaching library
-(`ddm4bio`) plus a full JupyterBook course site: weekly lessons, problem sets, and a
+(`ddm4bio`) plus a full JupyterBook course site: lessons, problem sets, and a
 warfarin PK/PD capstone.
 
 Content follows J. N. Kutz, *Data-Driven Modeling & Scientific Computation*
@@ -49,7 +49,7 @@ pip install -e ".[imaging]"     # medmnist, scikit-image, nibabel
 
 ```
 src/ddm4bio/   shared library (config, qc, viz, methods, datasets, utils, interpret)
-book/          JupyterBook course site: weekly lessons, syllabus, schedule, references, capstone + RL preview
+book/          JupyterBook course site: lessons, syllabus, schedule, references, capstone + RL preview
 problem_sets/  7 problem-set briefs (README + student scaffold + rubric); solutions + autograders are in the private instructor repo
 capstone/      spec, rubric, runnable template, and section linter
 data/          DATA_CARD.md + gitignored raw/ and cache/

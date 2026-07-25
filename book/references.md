@@ -1,7 +1,7 @@
 # References
 
 The works below are the primary sources behind this course's methods and design
-choices, grouped by the week — and the capstone — that draws on them. They are listed as
+choices, grouped by the module — and the capstone — that draws on them. They are listed as
 recommended reading and as pointers to the original treatments of each algorithm; nothing
 from them is reproduced in these pages, and each lesson names the sources it draws on so you
 can trace an idea back to its original treatment and read the authors in their own words.
@@ -14,31 +14,31 @@ the specific chapters.
 :filter: key in {"kutz2013ddm"}
 ```
 
-## Week 2 — Curve fitting, differentiation, and sparsity
+## Module 2 — Curve fitting, differentiation, and sparsity
 
 ```{bibliography}
 :filter: key in {"barretina2012ccle"}
 ```
 
-## Week 4 — Signals: Fourier, wavelets, and compressed sensing
+## Module 4 — Signals: Fourier, wavelets, and compressed sensing
 
 ```{bibliography}
 :filter: key in {"donoho2006cs"}
 ```
 
-## Week 5 — Dimensionality reduction and blood-cell images
+## Module 5 — Dimensionality reduction and blood-cell images
 
 ```{bibliography}
 :filter: key in {"yang2023medmnist", "hyvarinen2000ica", "candes2011rpca", "maaten2008tsne", "mcinnes2018umap"}
 ```
 
-## Week 7 — Dynamics from data
+## Module 7 — Dynamics from data
 
 ```{bibliography}
 :filter: key in {"schmid2010dmd", "brunton2016sindy"}
 ```
 
-## Week 8 — Deep learning
+## Module 8 — Deep learning
 
 ```{bibliography}
 :filter: key in {"sainburg2021pumap"}

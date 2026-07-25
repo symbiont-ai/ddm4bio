@@ -8,7 +8,7 @@
 (SVD/PCA and independent component analysis), plus any introduction to Horn's
 parallel analysis and the Marchenko–Pastur law.
 
-Week 5 computes a PCA/SVD spectrum and **eyeballs a scree plot** to guess how many
+Module 5 computes a PCA/SVD spectrum and **eyeballs a scree plot** to guess how many
 components matter. This problem set replaces the guess with a principled stopping
 rule — **Horn's parallel analysis**: permute each gene column independently to build a
 rank-matched *noise* null, then keep only the leading components whose real eigenvalue

@@ -2,9 +2,9 @@
 
 ## Format
 
-This is a **self-paced, 8-week online course** — enroll and start any time, and move at
-whatever pace suits you. "Week" is simply a unit of coherent material, not a fixed
-schedule. Each week has two components:
+This is a **self-paced, 8-module online course** — enroll and start any time, and move at
+whatever pace suits you. "Module" is simply a unit of coherent material, not a fixed
+schedule. Each module has two components:
 
 - **A lesson** that develops the ideas and the mathematics in plain language, with fully
   worked code. Read it on the page, or open the same notebook in Google Colab with one
@@ -23,18 +23,18 @@ gatekeeping.
 You'll move fastest if you're comfortable with:
 
 - **Linear algebra** — vectors, matrices, eigenvalues/eigenvectors, and ideally having
-  *seen* the SVD. Week 1 sets up and solves linear systems and reads conditioning off the
-  singular values from day one; Week 5 then uses the SVD and eigendecomposition fluently for PCA.
+  *seen* the SVD. Module 1 sets up and solves linear systems and reads conditioning off the
+  singular values from day one; Module 5 then uses the SVD and eigendecomposition fluently for PCA.
 - **Probability & statistics** — distributions, variance, hypothesis testing and
-  p-values, and the idea of a *null distribution*. Weeks 3 and 6 lean on base rates
+  p-values, and the idea of a *null distribution*. Modules 3 and 6 lean on base rates
   and Bayes, permutation nulls, Type-I error, and selective inference.
 - **Python + NumPy** — comfortable writing *and modifying* scientific code, not writing
   your first program.
 - **Calculus** — gradients and derivatives (gradient descent, finite-time rates,
   Jacobians conceptually).
 
-A prior **machine-learning course is recommended, not required.** With one, Weeks 2–3
-and the deep-learning week (8) go smoothly; without one, those are the steep parts —
+A prior **machine-learning course is recommended, not required.** With one, Modules 2–3
+and the deep-learning module (8) go smoothly; without one, those are the steep parts —
 reachable, just steeper. Everything else assumes only the bar above.
 
 **Rusty? Brush up on** solving linear systems and least squares (the normal equations and the
@@ -61,7 +61,7 @@ You will work entirely in the modern scientific-Python ecosystem:
 
 - **NumPy** and **SciPy** for numerical arrays, linear algebra, and signal processing.
 - **scikit-learn** for classical machine learning.
-- **PyTorch** for neural networks and deep learning — the Week-8 lesson trains small
+- **PyTorch** for neural networks and deep learning — the Module-8 lesson trains small
   models device-agnostically (on a GPU when one is available, otherwise CPU) and is
   designed to run on CPU.
 - **Jupyter** notebooks as the interactive computing environment (run in Google Colab).
@@ -84,7 +84,7 @@ Kutz's textbook lives largely in its data-methods chapters. We spend our time on
   identification of nonlinear dynamics (SINDy), and data assimilation /
   Kalman filtering.
 - **Deep learning** — linear and nonlinear autoencoders and a convolutional classifier in
-  Week 8. Reinforcement learning — a
+  Module 8. Reinforcement learning — a
   distinct paradigm (learning to act) — is previewed and developed in the capstone.
   Transformers and foundation-model embeddings sit beyond this course's scope.
 

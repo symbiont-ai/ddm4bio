@@ -7,7 +7,7 @@
 **Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 15
 (the SVD, PCA, and low-rank approximation).
 
-Week 5a built an eigen-image basis and used it to *recognize* blood cells. This
+Module 5a built an eigen-image basis and used it to *recognize* blood cells. This
 problem set keeps that basis but asks a different question: if the top principal
 axes capture what a **normal** cell looks like, what can the *residual* — the part
 that doesn't fit — tell us? You will put the same subspace to two new uses on real
@@ -16,7 +16,7 @@ BloodMNIST.
 The eigen-basis primitives (`eigen_basis`, `project`, `reconstruct`) and the data
 loader are **provided** — this problem set is about what you *do* with the
 subspace, not rebuilding it. `eigen_basis` computes the basis with
-`numpy.linalg.svd` directly, exactly as the Week 5a lesson does. Fill in the
+`numpy.linalg.svd` directly, exactly as the Module 5a lesson does. Fill in the
 functions marked `# TODO` in `student/ps1.py`. The autograder checks each on its
 own seeded fixtures, so keep the signatures exactly as given.
 

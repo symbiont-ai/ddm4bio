@@ -18,7 +18,7 @@ BloodMNIST cell crops, the Wisconsin breast-cytology panel, UCI heart-disease
 records, MIT-BIH ECG, 10x pbmc3k single cells, the JHU COVID-19 series, and more.
 Whenever that dataset carries the label or target your claim is about, you score
 your result **on the real data itself** — real inputs, real labels, a real
-held-out test. When you classify blood-cell images (Week 5), diagnose heart
+held-out test. When you classify blood-cell images (Module 5), diagnose heart
 disease (Problem Set 3), or read a breast-cytology panel (Problem Set 6), the
 accuracy or AUC you report is measured on real samples and real patients.
 
@@ -40,12 +40,12 @@ necessary, not sufficient: the real-data conclusion still needs its own data-spe
 QC, sensitivity analysis, and external or biological validation, so the claim you make
 there stays appropriately smaller.
 
-- In **Week 5b** you score ICA on a synthetic mixture whose sources you injected,
-  and in **Week 5a** you apply PCA to real pbmc3k cells (whose true sources are
+- In **Module 5b** you score ICA on a synthetic mixture whose sources you injected,
+  and in **Module 5a** you apply PCA to real pbmc3k cells (whose true sources are
   unknown, so that part stays qualitative).
-- In **Week 7** you score SINDy and DMD on systems with known dynamics, then
+- In **Module 7** you score SINDy and DMD on systems with known dynamics, then
   forecast a real COVID-19 curve and smooth a real ECG.
-- In **Week 4** you score exact recovery on a known sparse signal, then denoise a
+- In **Module 4** you score exact recovery on a known sparse signal, then denoise a
   real MIT-BIH heartbeat.
 
 If your method can't recover a signal you planted yourself, it has no business

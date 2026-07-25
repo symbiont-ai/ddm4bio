@@ -9,7 +9,7 @@
 inference), plus an introduction to multiple-testing / FDR and to
 selective inference (post-selection / data-thinning).
 
-Week 6 clusters cells and then runs BH-FDR on per-feature t-tests **between the clusters
+Module 6 clusters cells and then runs BH-FDR on per-feature t-tests **between the clusters
 it just discovered**. That is **circular** — the partition was chosen to separate the
 cells, so features look "significant" even in pure noise, and FDR does not fix it (BH
 corrects multiplicity, not selection). This problem set makes that failure *measurable*

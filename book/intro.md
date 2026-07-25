@@ -60,7 +60,7 @@ deadline but your own. Learning happens by doing:
 
 - **Every lab runs in the browser.** Each computational lab opens in Google Colab with a
   single click, so there is nothing to install and nothing to configure. You write and
-  run real code against real data from the first week.
+  run real code against real data from the first module.
 - **Problem sets are auto-graded.** You get immediate, objective feedback, which means
   you can iterate quickly and know when you have actually gotten something right.
 

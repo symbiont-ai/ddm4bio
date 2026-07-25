@@ -8,7 +8,7 @@
 (least-squares curve fitting, polynomial and spline interpolation, and sparsity for
 curve fitting).
 
-Week 2 fit a model at a complexity *you* chose — a curve of a given form, a Lasso
+Module 2 fit a model at a complexity *you* chose — a curve of a given form, a Lasso
 at a given penalty. This problem set asks the harder question you face when you do
 **not** know the truth: how complex a model does the data actually support? The
 answer is **cross-validation** — score each candidate on data it was not fit on,

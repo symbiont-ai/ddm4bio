@@ -1,6 +1,6 @@
 """Student template for PS3: from ranking to deciding.
 
-Week 3 measured a classifier's *generalization* (accuracy); its scores also *rank*
+Module 3 measured a classifier's *generalization* (accuracy); its scores also *rank*
 patients. But a deployed test does not just rank -- it *decides*: it flags a patient
 or clears them, at a threshold. This problem set is about that decision and its
 traps, on the real UCI heart-disease cohort.

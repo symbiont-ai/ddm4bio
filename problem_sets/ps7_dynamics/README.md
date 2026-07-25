@@ -7,7 +7,7 @@
 **Reading:** Kutz, *Data-Driven Modeling & Scientific Computation*, Chapter 7
 (dynamical systems, DMD/SINDy), plus any introduction to chaos and the Lyapunov exponent.
 
-Week 7 **fits** data-driven models (DMD, SINDy, Kalman) and reports a one-shot forecast
+Module 7 **fits** data-driven models (DMD, SINDy, Kalman) and reports a one-shot forecast
 error at a fixed horizon. This problem set — the course **finale** — asks the question
 *underneath* every forecast: **how far ahead can any model see before chaos wins?** For a
 chaotic system the answer is a **finite** horizon set by the rate at which nearby

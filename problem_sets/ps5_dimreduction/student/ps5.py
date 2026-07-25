@@ -1,6 +1,6 @@
 """PS5: signal or noise? A significance test for the rank of an expression matrix.
 
-Week 5 computes a PCA/SVD spectrum and eyeballs a scree plot to guess how many
+Module 5 computes a PCA/SVD spectrum and eyeballs a scree plot to guess how many
 components matter. This problem set replaces the guess with a principled stopping
 rule -- **Horn's parallel analysis**: permute each gene column independently to build
 a rank-matched *noise* null (all cross-feature structure destroyed, marginals kept),

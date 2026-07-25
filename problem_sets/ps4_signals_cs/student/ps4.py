@@ -1,6 +1,6 @@
 """PS4: how undersampled can you go? (the compressed-sensing limit).
 
-Week 4 reconstructs one sparse signal from one set of compressed measurements. This
+Module 4 reconstructs one sparse signal from one set of compressed measurements. This
 problem set asks the question underneath that demo: **how few measurements can you
 get away with?** Compressed sensing does not degrade gracefully -- below a sharp
 threshold recovery fails completely, above it recovery succeeds. You will map that
