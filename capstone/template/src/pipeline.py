@@ -38,7 +38,7 @@ def load_data():
     ds = get_dataset("warfarin")
     print(f"[load] warfarin source={ds.source}")
     print(f"[load] {ds.provenance}\n")
-    return ds.payload
+    return ds.payload, ds.source
 
 
 def quality_control(df) -> None:
@@ -133,7 +133,9 @@ def calibrate_environment(kes: np.ndarray) -> PKDosingEnv:
     """
     factors = np.exp(-np.percentile(kes, [75, 50, 25]) * DOSING_INTERVAL_H)
     decays = tuple(np.sort(factors))
-    print(f"[calibrate] per-interval clearance from real ke = {np.round(decays, 3).tolist()}\n")
+    print(
+        f"[calibrate] per-interval clearance from the fitted ke = {np.round(decays, 3).tolist()}\n"
+    )
     return PKDosingEnv(decays=decays, decay_probs=(0.25, 0.50, 0.25))
 
 
@@ -177,29 +179,51 @@ def validate(env: PKDosingEnv, pi_q) -> tuple[float, float]:
     return tir_learned, tir_fixed
 
 
-def interpret(t_half_d: float, frac_opt: float, tir_learned: float, tir_fixed: float) -> str:
-    """Close with an explicit claim and named limitations."""
+def interpret(
+    t_half_d: float, frac_opt: float, tir_learned: float, tir_fixed: float, source: str
+) -> str:
+    """Close with an explicit claim and named limitations (wording tracks the data source)."""
+    real = source == "real"
+    data_phrase = (
+        "fit from real data"
+        if real
+        else "fit from a synthetic PK/PD stand-in (the real warfarin data was "
+        "unavailable, so this is an offline pedagogical run)"
+    )
+    half_life_phrase = (
+        f"the PK fit recovers warfarin's ~{t_half_d:.1f}-day half-life"
+        if real
+        else f"the fitted half-life is ~{t_half_d:.1f} days (built into the fixture, so "
+        "this is internal consistency, not a validation against the real drug)"
+    )
+    limitations = [
+        "The PK model is one-compartment and the control problem is a "
+        "discretized MDP with a normalized concentration axis; real warfarin "
+        "PK/PD is multi-compartment with a delayed (turnover) effect.",
+        "Inter-patient variability is summarized as a three-point clearance "
+        "distribution from 32 subjects; a larger, covariate-aware model would "
+        "individualize dosing further.",
+        "The therapeutic window and toxicity penalty are modeling choices, not "
+        "calibrated INR targets; different clinical objectives change the policy.",
+        "This is a pedagogical pipeline, NOT a clinical dosing tool -- real "
+        "warfarin dosing uses validated nomograms and INR monitoring.",
+    ]
+    if not real:
+        limitations.insert(
+            0,
+            "This run fell back to the OFFLINE SYNTHETIC dataset (the real warfarin "
+            "data was unreachable); the numbers illustrate the pipeline's behavior, "
+            "not measurements of the real drug.",
+        )
     return interpretation_block(
         claim=(
-            f"A dosing policy learned on a warfarin PK model fit from real data "
+            f"A dosing policy learned on a warfarin PK model {data_phrase} "
             f"holds the anticoagulation effect in its therapeutic window "
             f"{tir_learned:.0%} of the time, versus {tir_fixed:.0%} for the best "
-            f"fixed dose; the PK fit recovers warfarin's ~{t_half_d:.1f}-day "
-            f"half-life, and the model-free learner reaches the model-based "
-            f"optimum on {frac_opt:.0%} of states."
+            f"fixed dose; {half_life_phrase}, and the model-free learner reaches the "
+            f"model-based optimum on {frac_opt:.0%} of states."
         ),
-        limitations_list=[
-            "The PK model is one-compartment and the control problem is a "
-            "discretized MDP with a normalized concentration axis; real warfarin "
-            "PK/PD is multi-compartment with a delayed (turnover) effect.",
-            "Inter-patient variability is summarized as a three-point clearance "
-            "distribution from 32 subjects; a larger, covariate-aware model would "
-            "individualize dosing further.",
-            "The therapeutic window and toxicity penalty are modeling choices, not "
-            "calibrated INR targets; different clinical objectives change the policy.",
-            "This is a pedagogical pipeline, NOT a clinical dosing tool -- real "
-            "warfarin dosing uses validated nomograms and INR monitoring.",
-        ],
+        limitations_list=limitations,
     )
 
 
@@ -209,7 +233,7 @@ def main() -> None:
     print("ddm4bio capstone -- warfarin PK/PD -> dosing policy (reference pipeline)")
     print("=" * 68 + "\n")
 
-    df = load_data()
+    df, source = load_data()
     quality_control(df)  # QC BEFORE results.
     kes = fit_pk(df)  # Group A: mechanistic PK fit (validated).
     characterize_pd(df)  # the effect endpoint that defines the target.
@@ -221,7 +245,7 @@ def main() -> None:
     print("-" * 68)
     print("INTERPRETATION")
     print("-" * 68)
-    print(interpret(t_half_d, frac_opt, tir_learned, tir_fixed))
+    print(interpret(t_half_d, frac_opt, tir_learned, tir_fixed, source))
 
 
 if __name__ == "__main__":
